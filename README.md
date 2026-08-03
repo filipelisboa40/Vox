@@ -43,9 +43,25 @@ Copy `.env.example` to `.env` and provide the Discord application values from th
 | `DISCORD_TOKEN`     | Yes      | Secret bot token                                     |
 | `DISCORD_CLIENT_ID` | Yes      | Discord application ID                               |
 | `YOUTUBE_API_KEY`   | Yes      | YouTube Data API v3 key for search and metadata      |
+| `LAVALINK_URL`      | Yes      | Base URL of the Lavalink media server                |
+| `LAVALINK_PASSWORD` | Yes      | Password configured on the Lavalink server           |
 | `DISCORD_GUILD_ID`  | No       | Development server ID for future command deploys     |
 | `YOUTUBE_REGION`    | No       | Two-letter region for search and availability checks |
 | `LOG_LEVEL`         | No       | Pino logging level; defaults to `info`               |
+
+## Lavalink
+
+YouTube metadata comes from the YouTube Data API, while playable audio comes from a
+Lavalink server using the `youtube-source` plugin. Download Lavalink `4.2.2`, place
+[`lavalink/application.yml`](./lavalink/application.yml) beside `Lavalink.jar`, set the same
+password in that file and `.env`, then start it before the bot:
+
+```text
+java -jar Lavalink.jar
+```
+
+The Docker milestone will run this server and the bot together. The current configuration is
+also usable for local development without Docker.
 
 Start the bot with `pnpm dev`. Press Ctrl+C to destroy the Discord client and exit cleanly.
 

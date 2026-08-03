@@ -93,6 +93,17 @@ function createFetchFixture(responses: readonly Response[]): {
     return { fetchImplementation, requestedUrls };
 }
 
+function createProvider(
+    options: Partial<ConstructorParameters<typeof YouTubeProvider>[0]> &
+        Pick<ConstructorParameters<typeof YouTubeProvider>[0], 'apiKey'>,
+): YouTubeProvider {
+    return new YouTubeProvider({
+        lavalinkUrl: 'http://localhost:2333',
+        lavalinkPassword: 'lavalink-password',
+        ...options,
+    });
+}
+
 describe('extractYouTubeVideoId', () => {
     it.each([
         `https://youtu.be/${videoId}`,
@@ -132,7 +143,7 @@ describe('YouTubeProvider', () => {
         const fixture = createFetchFixture([
             jsonResponse({ items: [createVideo({ title: '  Example\n song  ' })] }),
         ]);
-        const provider = new YouTubeProvider({
+        const provider = createProvider({
             apiKey: 'secret-key',
             fetchImplementation: fixture.fetchImplementation,
         });
@@ -159,7 +170,7 @@ describe('YouTubeProvider', () => {
                 ],
             }),
         ]);
-        const provider = new YouTubeProvider({
+        const provider = createProvider({
             apiKey: 'key',
             region: 'PT',
             fetchImplementation: fixture.fetchImplementation,
@@ -180,13 +191,13 @@ describe('YouTubeProvider', () => {
         const missingFixture = createFetchFixture([jsonResponse({ items: [] })]);
 
         await expect(
-            new YouTubeProvider({
+            createProvider({
                 apiKey: 'key',
                 fetchImplementation: privateFixture.fetchImplementation,
             }).resolveUrl(new URL(`https://youtu.be/${videoId}`)),
         ).rejects.toBeInstanceOf(MediaUnavailableError);
         await expect(
-            new YouTubeProvider({
+            createProvider({
                 apiKey: 'key',
                 fetchImplementation: missingFixture.fetchImplementation,
             }).resolveUrl(new URL(`https://youtu.be/${videoId}`)),
@@ -201,7 +212,7 @@ describe('YouTubeProvider', () => {
         createVideo({ duration: 'PT13H' }),
     ])('rejects restricted or unsupported video metadata', async (video) => {
         const fixture = createFetchFixture([jsonResponse({ items: [video] })]);
-        const provider = new YouTubeProvider({
+        const provider = createProvider({
             apiKey: 'key',
             region: 'PT',
             fetchImplementation: fixture.fetchImplementation,
@@ -214,7 +225,7 @@ describe('YouTubeProvider', () => {
 
     it('returns no-results errors without making real API requests', async () => {
         const fixture = createFetchFixture([jsonResponse({ items: [] })]);
-        const provider = new YouTubeProvider({
+        const provider = createProvider({
             apiKey: 'key',
             fetchImplementation: fixture.fetchImplementation,
         });
@@ -222,8 +233,21 @@ describe('YouTubeProvider', () => {
         await expect(provider.search('missing')).rejects.toBeInstanceOf(NoMediaResultsError);
     });
 
-    it('does not pretend the metadata API supplies an audio stream', async () => {
-        const provider = new YouTubeProvider({ apiKey: 'key' });
+    it('streams playable audio from the authenticated Lavalink endpoint', async () => {
+        let requestUrl: URL | undefined;
+        let authorization: string | null = null;
+        const provider = createProvider({
+            apiKey: 'key',
+            fetchImplementation: (input, init) => {
+                requestUrl = new URL(input instanceof Request ? input.url : input.toString());
+                authorization = new Headers(init?.headers).get('authorization');
+                return Promise.resolve(
+                    new Response('audio bytes', {
+                        headers: { 'content-type': 'audio/webm' },
+                    }),
+                );
+            },
+        });
         const audioProvider: AudioProvider = provider;
         const track = {
             provider: 'youtube',
@@ -233,8 +257,66 @@ describe('YouTubeProvider', () => {
             durationMs: 1000,
         };
 
-        await expect(audioProvider.createPlayableSource(track)).rejects.toBeInstanceOf(
+        const source = await audioProvider.createPlayableSource(track);
+
+        expect(requestUrl?.href).toBe(`http://localhost:2333/youtube/stream/${videoId}`);
+        expect(authorization).toBe('lavalink-password');
+        expect(source.format).toBe('webm-opus');
+        source.stream.setEncoding('utf8');
+        let streamedAudio = '';
+
+        for await (const chunk of source.stream) {
+            streamedAudio += String(chunk);
+        }
+
+        expect(streamedAudio).toBe('audio bytes');
+        await source.dispose?.();
+    });
+
+    it('wraps Lavalink connection and response failures as media stream errors', async () => {
+        const unreachableProvider = createProvider({
+            apiKey: 'key',
+            fetchImplementation: () => Promise.reject(new Error('connection refused')),
+        });
+        const rejectedProvider = createProvider({
+            apiKey: 'key',
+            fetchImplementation: () => Promise.resolve(new Response(null, { status: 401 })),
+        });
+        const track = {
+            provider: 'youtube',
+            providerTrackId: videoId,
+            title: 'Song',
+            url: `https://www.youtube.com/watch?v=${videoId}`,
+            durationMs: 1000,
+        };
+
+        await expect(unreachableProvider.createPlayableSource(track)).rejects.toBeInstanceOf(
             MediaStreamError,
         );
+        await expect(rejectedProvider.createPlayableSource(track)).rejects.toBeInstanceOf(
+            MediaStreamError,
+        );
+    });
+
+    it('rejects oversized Lavalink responses before buffering them', async () => {
+        const provider = createProvider({
+            apiKey: 'key',
+            fetchImplementation: () =>
+                Promise.resolve(
+                    new Response('audio', {
+                        headers: { 'content-length': String(257 * 1024 * 1024) },
+                    }),
+                ),
+        });
+
+        await expect(
+            provider.createPlayableSource({
+                provider: 'youtube',
+                providerTrackId: videoId,
+                title: 'Song',
+                url: `https://www.youtube.com/watch?v=${videoId}`,
+                durationMs: 1000,
+            }),
+        ).rejects.toBeInstanceOf(MediaStreamError);
     });
 });

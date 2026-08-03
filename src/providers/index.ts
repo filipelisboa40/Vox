@@ -5,6 +5,8 @@ import { YouTubeProvider } from './youtube/youtube-provider.js';
 export function createProviderManager(environment: Environment): ProviderManager {
     const youtubeProvider = new YouTubeProvider({
         apiKey: environment.youtubeApiKey,
+        lavalinkUrl: environment.lavalinkUrl,
+        lavalinkPassword: environment.lavalinkPassword,
         ...(environment.youtubeRegion === undefined ? {} : { region: environment.youtubeRegion }),
     });
 

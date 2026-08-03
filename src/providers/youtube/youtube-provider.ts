@@ -1,6 +1,12 @@
 import { z } from 'zod';
+import { Readable } from 'node:stream';
 
-import type { AudioProvider, PlayableSource, ProviderTrack } from '../audio-provider.js';
+import {
+    AudioSourceFormat,
+    type AudioProvider,
+    type PlayableSource,
+    type ProviderTrack,
+} from '../audio-provider.js';
 import {
     MediaStreamError,
     MediaUnavailableError,
@@ -13,6 +19,7 @@ import { normalizeExternalText } from '../../utilities/external-text.js';
 const youtubeApiBaseUrl = 'https://www.googleapis.com/youtube/v3/';
 const youtubeVideoIdPattern = /^[A-Za-z0-9_-]{11}$/;
 const defaultMaximumDurationMs = 12 * 60 * 60 * 1_000;
+const maximumPlayableSourceBytes = 256 * 1024 * 1024;
 
 const searchResponseSchema = z.object({
     items: z.array(
@@ -58,6 +65,8 @@ const videoResponseSchema = z.object({
 
 export interface YouTubeProviderOptions {
     readonly apiKey: string;
+    readonly lavalinkUrl: string;
+    readonly lavalinkPassword: string;
     readonly region?: string;
     readonly maximumDurationMs?: number;
     readonly fetchImplementation?: typeof fetch;
@@ -66,12 +75,16 @@ export interface YouTubeProviderOptions {
 export class YouTubeProvider implements AudioProvider {
     public readonly name = 'youtube';
     readonly #apiKey: string;
+    readonly #lavalinkUrl: URL;
+    readonly #lavalinkPassword: string;
     readonly #region: string | undefined;
     readonly #maximumDurationMs: number;
     readonly #fetch: typeof fetch;
 
     public constructor(options: YouTubeProviderOptions) {
         this.#apiKey = options.apiKey;
+        this.#lavalinkUrl = new URL(options.lavalinkUrl);
+        this.#lavalinkPassword = options.lavalinkPassword;
         this.#region = options.region;
         this.#maximumDurationMs = options.maximumDurationMs ?? defaultMaximumDurationMs;
         this.#fetch = options.fetchImplementation ?? fetch;
@@ -136,12 +149,73 @@ export class YouTubeProvider implements AudioProvider {
         return this.#mapVideo(video);
     }
 
-    public createPlayableSource(): Promise<PlayableSource> {
-        return Promise.reject(
-            new MediaStreamError(
-                'The YouTube Data API provides metadata, not an authorized raw audio stream',
-            ),
+    public async createPlayableSource(track: ProviderTrack): Promise<PlayableSource> {
+        if (track.provider !== this.name || !youtubeVideoIdPattern.test(track.providerTrackId)) {
+            throw new MediaStreamError('The track is not a valid YouTube track');
+        }
+
+        // This endpoint is provided by Lavalink's youtube-source plugin. The bot still
+        // owns the Discord voice connection, so the response body becomes its audio input.
+        const streamUrl = new URL(
+            `youtube/stream/${encodeURIComponent(track.providerTrackId)}`,
+            ensureTrailingSlash(this.#lavalinkUrl),
         );
+
+        const abortController = new AbortController();
+        let response: Response;
+
+        try {
+            response = await this.#fetch(streamUrl, {
+                headers: { Authorization: this.#lavalinkPassword },
+                signal: abortController.signal,
+            });
+        } catch (error: unknown) {
+            throw new MediaStreamError('Could not connect to the Lavalink media server', {
+                cause: error,
+            });
+        }
+
+        if (!response.ok || response.body === null) {
+            abortController.abort();
+            throw new MediaStreamError('Lavalink could not create a stream for this track');
+        }
+
+        const declaredLength = Number(response.headers.get('content-length'));
+
+        if (Number.isFinite(declaredLength) && declaredLength > maximumPlayableSourceBytes) {
+            abortController.abort();
+            throw new MediaStreamError('The Lavalink audio response is too large to buffer');
+        }
+
+        let audio: Buffer;
+
+        try {
+            // Drain Lavalink immediately. Passing the HTTP body directly to FFmpeg applies
+            // playback-speed backpressure and can leave Undertow's socket idle long enough
+            // to be terminated before the track finishes.
+            audio = Buffer.from(await response.arrayBuffer());
+        } catch (error: unknown) {
+            abortController.abort();
+            throw new MediaStreamError('Lavalink terminated the audio download', {
+                cause: error,
+            });
+        }
+
+        if (audio.byteLength > maximumPlayableSourceBytes) {
+            abortController.abort();
+            throw new MediaStreamError('The Lavalink audio response is too large to buffer');
+        }
+
+        const stream = Readable.from([audio]);
+
+        return {
+            stream,
+            format: inferAudioSourceFormat(response.headers.get('content-type')),
+            dispose: () => {
+                abortController.abort();
+                stream.destroy();
+            },
+        };
     }
 
     async #fetchVideos(videoIds: readonly string[]): Promise<z.output<typeof videoResponseSchema>> {
@@ -248,6 +322,30 @@ export class YouTubeProvider implements AudioProvider {
 
         return parsedPayload.data;
     }
+}
+
+function ensureTrailingSlash(url: URL): URL {
+    const normalized = new URL(url);
+    normalized.pathname = `${normalized.pathname.replace(/\/$/, '')}/`;
+    return normalized;
+}
+
+function inferAudioSourceFormat(contentType: string | null): AudioSourceFormat {
+    const normalized = contentType?.toLocaleLowerCase() ?? '';
+
+    if (normalized.includes('webm')) {
+        return AudioSourceFormat.WebmOpus;
+    }
+
+    if (normalized.includes('ogg')) {
+        return AudioSourceFormat.OggOpus;
+    }
+
+    if (normalized.includes('opus')) {
+        return AudioSourceFormat.Opus;
+    }
+
+    return AudioSourceFormat.Unknown;
 }
 
 export function extractYouTubeVideoId(url: URL): string | undefined {

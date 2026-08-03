@@ -6,6 +6,8 @@ const validInput = {
     DISCORD_TOKEN: 'test-token-that-must-never-appear-in-errors',
     DISCORD_CLIENT_ID: '123456789012345678',
     YOUTUBE_API_KEY: 'youtube-test-key',
+    LAVALINK_URL: 'http://localhost:2333',
+    LAVALINK_PASSWORD: 'lavalink-test-password',
 };
 
 describe('parseEnvironment', () => {
@@ -14,6 +16,8 @@ describe('parseEnvironment', () => {
             discordToken: validInput.DISCORD_TOKEN,
             discordClientId: validInput.DISCORD_CLIENT_ID,
             youtubeApiKey: validInput.YOUTUBE_API_KEY,
+            lavalinkUrl: validInput.LAVALINK_URL,
+            lavalinkPassword: validInput.LAVALINK_PASSWORD,
         });
     });
 

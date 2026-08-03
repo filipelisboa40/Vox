@@ -213,13 +213,13 @@ export class AudioResourceManager {
         try {
             await disposeSource(managedResource.source);
         } catch (error: unknown) {
-            this.#logger.warn({ error }, 'Audio source cleanup failed');
+            this.#logger.warn({ err: error }, 'Audio source cleanup failed');
         }
     }
 
     async #notifyFailure(track: Track, error: unknown): Promise<void> {
         this.#logger.error(
-            { error, provider: track.provider, providerTrackId: track.providerTrackId },
+            { err: error, provider: track.provider, providerTrackId: track.providerTrackId },
             'Track playback failed',
         );
         await this.#runCallback(this.#onTrackFailed, track, error);
@@ -232,7 +232,7 @@ export class AudioResourceManager {
         try {
             await callback?.(...arguments_);
         } catch (error: unknown) {
-            this.#logger.error({ error }, 'Audio resource callback failed');
+            this.#logger.error({ err: error }, 'Audio resource callback failed');
         }
     }
 }
