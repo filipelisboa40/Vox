@@ -5,16 +5,23 @@ const snowflakeSchema = z.string().regex(/^\d{17,20}$/, 'must be a valid Discord
 const environmentSchema = z.object({
     DISCORD_TOKEN: z.string().trim().min(1, 'is required'),
     DISCORD_CLIENT_ID: snowflakeSchema,
+    YOUTUBE_API_KEY: z.string().trim().min(1, 'is required'),
     DISCORD_GUILD_ID: z.preprocess(
         (value) => (value === '' ? undefined : value),
         snowflakeSchema.optional(),
+    ),
+    YOUTUBE_REGION: z.preprocess(
+        (value) => (value === '' ? undefined : value),
+        z.string().trim().length(2).toUpperCase().optional(),
     ),
 });
 
 export interface Environment {
     discordToken: string;
     discordClientId: string;
+    youtubeApiKey: string;
     discordGuildId?: string;
+    youtubeRegion?: string;
 }
 
 export class ConfigurationError extends Error {
@@ -35,9 +42,13 @@ export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
     return {
         discordToken: result.data.DISCORD_TOKEN,
         discordClientId: result.data.DISCORD_CLIENT_ID,
+        youtubeApiKey: result.data.YOUTUBE_API_KEY,
         ...(result.data.DISCORD_GUILD_ID === undefined
             ? {}
             : { discordGuildId: result.data.DISCORD_GUILD_ID }),
+        ...(result.data.YOUTUBE_REGION === undefined
+            ? {}
+            : { youtubeRegion: result.data.YOUTUBE_REGION }),
     };
 }
 

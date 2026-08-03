@@ -5,6 +5,7 @@ import { ConfigurationError, parseEnvironment } from './environment.js';
 const validInput = {
     DISCORD_TOKEN: 'test-token-that-must-never-appear-in-errors',
     DISCORD_CLIENT_ID: '123456789012345678',
+    YOUTUBE_API_KEY: 'youtube-test-key',
 };
 
 describe('parseEnvironment', () => {
@@ -12,6 +13,13 @@ describe('parseEnvironment', () => {
         expect(parseEnvironment(validInput)).toEqual({
             discordToken: validInput.DISCORD_TOKEN,
             discordClientId: validInput.DISCORD_CLIENT_ID,
+            youtubeApiKey: validInput.YOUTUBE_API_KEY,
+        });
+    });
+
+    it('normalizes an optional YouTube region', () => {
+        expect(parseEnvironment({ ...validInput, YOUTUBE_REGION: 'pt' })).toMatchObject({
+            youtubeRegion: 'PT',
         });
     });
 
