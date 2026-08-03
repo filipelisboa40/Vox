@@ -29,14 +29,46 @@ interface AudioPlayerFixture {
     readonly emitter: EventEmitter;
     readonly play: ReturnType<typeof vi.fn>;
     readonly stop: ReturnType<typeof vi.fn>;
+    readonly pause: ReturnType<typeof vi.fn>;
+    readonly unpause: ReturnType<typeof vi.fn>;
+    setStatus(status: AudioPlayerStatus): void;
 }
 
 function createAudioPlayerFixture(): AudioPlayerFixture {
     const emitter = new EventEmitter();
+    let status: AudioPlayerStatus = AudioPlayerStatus.Idle;
     const play = vi.fn();
     const stop = vi.fn();
-    const audioPlayer = Object.assign(emitter, { play, stop }) as unknown as AudioPlayer;
-    return { audioPlayer, emitter, play, stop };
+    const pause = vi.fn(() => {
+        if (status !== AudioPlayerStatus.Playing) {
+            return false;
+        }
+
+        status = AudioPlayerStatus.Paused;
+        return true;
+    });
+    const unpause = vi.fn(() => {
+        if (status !== AudioPlayerStatus.Paused) {
+            return false;
+        }
+
+        status = AudioPlayerStatus.Playing;
+        return true;
+    });
+    const audioPlayer = Object.assign(emitter, { play, stop, pause, unpause });
+    Object.defineProperty(audioPlayer, 'state', { get: () => ({ status }) });
+
+    return {
+        audioPlayer: audioPlayer as unknown as AudioPlayer,
+        emitter,
+        play,
+        stop,
+        pause,
+        unpause,
+        setStatus: (newStatus) => {
+            status = newStatus;
+        },
+    };
 }
 
 interface SourceFixture {
@@ -106,6 +138,41 @@ function createLogger(): Logger {
 }
 
 describe('AudioResourceManager', () => {
+    it('pauses only while playing and resumes only while paused', async () => {
+        const player = createAudioPlayerFixture();
+        const source = createSource();
+        const manager = new AudioResourceManager({
+            audioPlayer: player.audioPlayer,
+            provider: createProvider([source.source]).provider,
+            logger: createLogger(),
+            resourceFactory: createResourceFixture().factory,
+        });
+        await manager.play(createTrack('song'));
+        player.setStatus(AudioPlayerStatus.Playing);
+
+        expect(manager.pause()).toBe(true);
+        expect(manager.pause()).toBe(false);
+        expect(manager.resume()).toBe(true);
+        expect(manager.resume()).toBe(false);
+        expect(player.pause).toHaveBeenCalledOnce();
+        expect(player.unpause).toHaveBeenCalledOnce();
+    });
+
+    it('does not pause or resume without a current resource', () => {
+        const player = createAudioPlayerFixture();
+        player.setStatus(AudioPlayerStatus.Playing);
+        const manager = new AudioResourceManager({
+            audioPlayer: player.audioPlayer,
+            provider: createProvider([]).provider,
+            logger: createLogger(),
+            resourceFactory: createResourceFixture().factory,
+        });
+
+        expect(manager.pause()).toBe(false);
+        player.setStatus(AudioPlayerStatus.Paused);
+        expect(manager.resume()).toBe(false);
+    });
+
     it('creates and plays an inline-volume resource with a requested offset', async () => {
         const player = createAudioPlayerFixture();
         const source = createSource(AudioSourceFormat.WebmOpus);
@@ -291,6 +358,31 @@ describe('AudioResourceManager', () => {
         expect(player.stop).toHaveBeenCalledTimes(2);
         expect(source.dispose).toHaveBeenCalledOnce();
         expect(source.stream.destroyed).toBe(true);
+    });
+
+    it('ignores the idle event emitted after an explicit stop', async () => {
+        const player = createAudioPlayerFixture();
+        const source = createSource();
+        const resources = createResourceFixture();
+        const onTrackFinished = vi.fn();
+        const manager = new AudioResourceManager({
+            audioPlayer: player.audioPlayer,
+            provider: createProvider([source.source]).provider,
+            logger: createLogger(),
+            resourceFactory: resources.factory,
+            onTrackFinished,
+        });
+        await manager.play(createTrack('stopped'));
+        await manager.stop();
+
+        player.emitter.emit(AudioPlayerStatus.Idle, {
+            status: AudioPlayerStatus.Playing,
+            resource: resources.resources[0],
+        });
+        await Promise.resolve();
+
+        expect(onTrackFinished).not.toHaveBeenCalled();
+        expect(source.dispose).toHaveBeenCalledOnce();
     });
 
     it('rejects invalid volume and disposes the new source', async () => {

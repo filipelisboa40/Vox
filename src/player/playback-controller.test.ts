@@ -1,6 +1,7 @@
 import type { Logger } from 'pino';
 import { describe, expect, it, vi } from 'vitest';
 
+import { LoopMode } from '../models/playback-state.js';
 import { createTrack } from '../models/test-fixtures.js';
 import type { Track } from '../models/track.js';
 import type { AudioResourceManager } from './audio-resource-manager.js';
@@ -10,6 +11,7 @@ interface ResourceFixture {
     readonly resources: AudioResourceManager;
     readonly play: ReturnType<typeof vi.fn>;
     readonly dispose: ReturnType<typeof vi.fn>;
+    readonly stop: ReturnType<typeof vi.fn>;
     clearCurrent(): void;
 }
 
@@ -26,13 +28,18 @@ function createResourceFixture(results: readonly boolean[] = [true]): ResourceFi
         return Promise.resolve(result);
     });
     const dispose = vi.fn().mockResolvedValue(undefined);
-    const resources = { play, dispose } as unknown as AudioResourceManager;
+    const stop = vi.fn(() => {
+        currentTrack = undefined;
+        return Promise.resolve();
+    });
+    const resources = { play, dispose, stop } as unknown as AudioResourceManager;
     Object.defineProperty(resources, 'currentTrack', { get: () => currentTrack });
 
     return {
         resources,
         play,
         dispose,
+        stop,
         clearCurrent: () => {
             currentTrack = undefined;
         },
@@ -113,7 +120,32 @@ describe('PlaybackController', () => {
         });
     });
 
-    it('clears waiting tracks and disposes resources', async () => {
+    it('stops playback and resets queue, history, and loop state', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        await controller.enqueue(createTrack('current'));
+        await controller.enqueue(createTrack('waiting'));
+        controller.skipHistory.push({ track: createTrack('skipped'), positionMs: 1_000 });
+        controller.setLoopMode(LoopMode.Queue);
+
+        await expect(controller.stop()).resolves.toBe(true);
+
+        expect(controller.queue.isEmpty).toBe(true);
+        expect(controller.skipHistory.size).toBe(0);
+        expect(controller.loopMode).toBe(LoopMode.Off);
+        expect(controller.currentTrack).toBeUndefined();
+        expect(resources.stop).toHaveBeenCalledOnce();
+    });
+
+    it('reports an already stopped controller', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+
+        await expect(controller.stop()).resolves.toBe(false);
+        expect(resources.stop).toHaveBeenCalledOnce();
+    });
+
+    it('disposes by applying the same complete stop reset', async () => {
         const resources = createResourceFixture();
         const controller = new PlaybackController(resources.resources, createLogger());
         await controller.enqueue(createTrack('current'));
@@ -122,6 +154,6 @@ describe('PlaybackController', () => {
         await controller.dispose();
 
         expect(controller.queue.isEmpty).toBe(true);
-        expect(resources.dispose).toHaveBeenCalledOnce();
+        expect(resources.stop).toHaveBeenCalledOnce();
     });
 });

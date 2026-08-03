@@ -1,6 +1,8 @@
 import type { Logger } from 'pino';
 
+import { LoopMode } from '../models/playback-state.js';
 import { QueueManager } from '../models/queue-manager.js';
+import { SkipHistory } from '../models/skip-history.js';
 import type { Track } from '../models/track.js';
 import type { AudioResourceManager } from './audio-resource-manager.js';
 
@@ -11,11 +13,13 @@ export type EnqueueResult =
 
 export class PlaybackController {
     public readonly queue = new QueueManager();
+    public readonly skipHistory = new SkipHistory();
     readonly #audioResources: AudioResourceManager;
     readonly #logger: Logger;
     #isStarting = false;
     #isAdvancing = false;
     #advanceRequested = false;
+    #loopMode: LoopMode = LoopMode.Off;
 
     public constructor(audioResources: AudioResourceManager, logger: Logger) {
         this.#audioResources = audioResources;
@@ -24,6 +28,22 @@ export class PlaybackController {
 
     public get currentTrack(): Track | undefined {
         return this.#audioResources.currentTrack;
+    }
+
+    public get loopMode(): LoopMode {
+        return this.#loopMode;
+    }
+
+    public setLoopMode(loopMode: LoopMode): void {
+        this.#loopMode = loopMode;
+    }
+
+    public pause(): boolean {
+        return this.#audioResources.pause();
+    }
+
+    public resume(): boolean {
+        return this.#audioResources.resume();
     }
 
     public async enqueue(track: Track): Promise<EnqueueResult> {
@@ -88,8 +108,18 @@ export class PlaybackController {
         }
     }
 
-    public async dispose(): Promise<void> {
+    public async stop(): Promise<boolean> {
+        const hadPlayback =
+            this.currentTrack !== undefined || !this.queue.isEmpty || this.#isStarting;
         this.queue.clearWaiting();
-        await this.#audioResources.dispose();
+        this.skipHistory.clear();
+        this.#loopMode = LoopMode.Off;
+        this.#advanceRequested = false;
+        await this.#audioResources.stop();
+        return hadPlayback;
+    }
+
+    public async dispose(): Promise<void> {
+        await this.stop();
     }
 }

@@ -78,6 +78,28 @@ export class AudioResourceManager {
         return this.#current?.track;
     }
 
+    public pause(): boolean {
+        if (
+            this.#current === undefined ||
+            this.#audioPlayer.state.status !== AudioPlayerStatus.Playing
+        ) {
+            return false;
+        }
+
+        return this.#audioPlayer.pause();
+    }
+
+    public resume(): boolean {
+        if (
+            this.#current === undefined ||
+            this.#audioPlayer.state.status !== AudioPlayerStatus.Paused
+        ) {
+            return false;
+        }
+
+        return this.#audioPlayer.unpause();
+    }
+
     public async play(track: Track, options: PlayOptions = {}): Promise<boolean> {
         const requestGeneration = ++this.#requestGeneration;
         let source: PlayableSource;
