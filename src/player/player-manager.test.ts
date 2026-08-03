@@ -95,23 +95,23 @@ describe('PlayerManager', () => {
         expect(manager.size).toBe(0);
     });
 
-    it('destroys one selected guild player', () => {
+    it('destroys one selected guild player', async () => {
         const fixture = createFactoryFixture();
         const manager = createManager(fixture);
         manager.getOrCreate(joinOptions('guild'));
 
-        expect(manager.destroy('guild')).toBe(true);
+        await expect(manager.destroy('guild')).resolves.toBe(true);
         expect(fixture.destroyMocks.get('guild')).toHaveBeenCalledOnce();
-        expect(manager.destroy('guild')).toBe(false);
+        await expect(manager.destroy('guild')).resolves.toBe(false);
     });
 
-    it('destroys and removes every guild player', () => {
+    it('destroys and removes every guild player', async () => {
         const fixture = createFactoryFixture();
         const manager = createManager(fixture);
         manager.getOrCreate(joinOptions('guild-one'));
         manager.getOrCreate(joinOptions('guild-two'));
 
-        manager.destroyAll();
+        await manager.destroyAll();
 
         expect(manager.size).toBe(0);
         expect(fixture.destroyMocks.get('guild-one')).toHaveBeenCalledOnce();

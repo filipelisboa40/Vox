@@ -6,6 +6,7 @@ Vox is a Discord music bot written in TypeScript.
 
 - Node.js 24 or newer
 - pnpm 11
+- FFmpeg available on `PATH` for sources that require transcoding
 
 ## Development
 

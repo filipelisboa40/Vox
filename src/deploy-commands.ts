@@ -2,13 +2,13 @@ import 'dotenv/config';
 
 import { REST, Routes } from 'discord.js';
 
-import { commandRegistry } from './commands/index.js';
+import { commandDefinitions } from './commands/index.js';
 import { readEnvironment } from './config/environment.js';
 import { logger } from './logger.js';
 
 async function deployCommands(): Promise<void> {
     const environment = readEnvironment();
-    const commandBodies = commandRegistry.toJSON();
+    const commandBodies = commandDefinitions.map((definition) => definition.toJSON());
 
     if (commandBodies.length === 0) {
         throw new Error(

@@ -6,7 +6,10 @@ import {
 } from '@discordjs/voice';
 import type { Logger } from 'pino';
 
+import type { ProviderManager } from '../providers/provider-manager.js';
+import { AudioResourceManager } from './audio-resource-manager.js';
 import { GuildPlayer } from './guild-player.js';
+import { PlaybackController } from './playback-controller.js';
 
 export interface JoinGuildPlayerOptions {
     readonly guildId: string;
@@ -67,7 +70,7 @@ export class PlayerManager {
         return player;
     }
 
-    public destroy(guildId: string): boolean {
+    public async destroy(guildId: string): Promise<boolean> {
         const player = this.#players.get(guildId);
 
         if (player === undefined) {
@@ -75,16 +78,16 @@ export class PlayerManager {
         }
 
         this.#players.delete(guildId);
-        player.destroy();
+        await player.destroy();
         return true;
     }
 
-    public destroyAll(): void {
+    public async destroyAll(): Promise<void> {
         const players = [...this.#players.values()];
         this.#players.clear();
 
         for (const player of players) {
-            player.destroy();
+            await player.destroy();
         }
     }
 }
@@ -105,6 +108,42 @@ function createDefaultGuildPlayer(logger: Logger): GuildPlayerFactory {
             ...options,
             connection,
             audioPlayer,
+            logger,
+            onDestroyed,
+        });
+    };
+}
+
+export function createManagedGuildPlayerFactory(
+    logger: Logger,
+    providerManager: ProviderManager,
+): GuildPlayerFactory {
+    return (options, onDestroyed) => {
+        const connection = joinVoiceChannel({
+            guildId: options.guildId,
+            channelId: options.voiceChannelId,
+            adapterCreator: options.adapterCreator,
+            selfDeaf: true,
+        });
+        const audioPlayer = createAudioPlayer({
+            behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
+        });
+        const playbackReference: { current?: PlaybackController } = {};
+        const audioResources = new AudioResourceManager({
+            audioPlayer,
+            provider: providerManager,
+            logger,
+            onTrackFinished: () => playbackReference.current?.advance(),
+            onTrackFailed: () => playbackReference.current?.advance(),
+        });
+        const playback = new PlaybackController(audioResources, logger);
+        playbackReference.current = playback;
+
+        return new GuildPlayer({
+            ...options,
+            connection,
+            audioPlayer,
+            playback,
             logger,
             onDestroyed,
         });

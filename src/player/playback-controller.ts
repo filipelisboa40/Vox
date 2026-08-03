@@ -1,0 +1,95 @@
+import type { Logger } from 'pino';
+
+import { QueueManager } from '../models/queue-manager.js';
+import type { Track } from '../models/track.js';
+import type { AudioResourceManager } from './audio-resource-manager.js';
+
+export type EnqueueResult =
+    | { readonly status: 'started' }
+    | { readonly status: 'queued'; readonly position: number }
+    | { readonly status: 'failed' };
+
+export class PlaybackController {
+    public readonly queue = new QueueManager();
+    readonly #audioResources: AudioResourceManager;
+    readonly #logger: Logger;
+    #isStarting = false;
+    #isAdvancing = false;
+    #advanceRequested = false;
+
+    public constructor(audioResources: AudioResourceManager, logger: Logger) {
+        this.#audioResources = audioResources;
+        this.#logger = logger;
+    }
+
+    public get currentTrack(): Track | undefined {
+        return this.#audioResources.currentTrack;
+    }
+
+    public async enqueue(track: Track): Promise<EnqueueResult> {
+        if (this.currentTrack !== undefined || this.#isStarting) {
+            const internalIndex = this.queue.add(track);
+            return { status: 'queued', position: internalIndex + 1 };
+        }
+
+        this.#isStarting = true;
+
+        try {
+            const started = await this.#audioResources.play(track);
+
+            if (!started) {
+                await this.advance();
+                return { status: 'failed' };
+            }
+
+            return { status: 'started' };
+        } finally {
+            this.#isStarting = false;
+        }
+    }
+
+    public async advance(): Promise<void> {
+        if (this.#isAdvancing) {
+            this.#advanceRequested = true;
+            return;
+        }
+
+        this.#isAdvancing = true;
+
+        try {
+            do {
+                this.#advanceRequested = false;
+                const nextTrack = this.queue.takeNext();
+
+                if (nextTrack === undefined) {
+                    return;
+                }
+
+                const started = await this.#audioResources.play(nextTrack);
+
+                if (started) {
+                    return;
+                }
+
+                this.#logger.warn(
+                    {
+                        provider: nextTrack.provider,
+                        providerTrackId: nextTrack.providerTrackId,
+                    },
+                    'Skipped an unplayable queued track',
+                );
+            } while (this.#advanceRequested || !this.queue.isEmpty);
+        } finally {
+            this.#isAdvancing = false;
+
+            if (this.#advanceRequested) {
+                void this.advance();
+            }
+        }
+    }
+
+    public async dispose(): Promise<void> {
+        this.queue.clearWaiting();
+        await this.#audioResources.dispose();
+    }
+}

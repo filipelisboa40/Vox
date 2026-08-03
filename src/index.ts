@@ -2,16 +2,25 @@ import 'dotenv/config';
 
 import { createDiscordClient } from './client/create-discord-client.js';
 import { registerShutdownHandlers } from './client/shutdown.js';
-import { commandRegistry } from './commands/index.js';
+import { createCommandRegistry } from './commands/index.js';
 import { readEnvironment } from './config/environment.js';
 import { registerInteractionHandler } from './interactions/register-interaction-handler.js';
 import { logger } from './logger.js';
-import { PlayerManager } from './player/player-manager.js';
+import { PlayerManager, createManagedGuildPlayerFactory } from './player/player-manager.js';
+import { createProviderManager } from './providers/index.js';
 
 async function start(): Promise<void> {
     const environment = readEnvironment();
     const client = createDiscordClient(logger);
-    const playerManager = new PlayerManager(logger);
+    const providerManager = createProviderManager(environment);
+    const playerManager = new PlayerManager(
+        logger,
+        createManagedGuildPlayerFactory(logger, providerManager),
+    );
+    const commandRegistry = createCommandRegistry({
+        players: playerManager,
+        providers: providerManager,
+    });
 
     registerInteractionHandler(client, commandRegistry, logger);
     registerShutdownHandlers(client, logger, () => playerManager.destroyAll());

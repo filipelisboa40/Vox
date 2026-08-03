@@ -21,6 +21,7 @@ export type AudioSourceFormat = (typeof AudioSourceFormat)[keyof typeof AudioSou
 export interface PlayableSource {
     readonly stream: Readable;
     readonly format: AudioSourceFormat;
+    readonly dispose?: () => void | Promise<void>;
 }
 
 export interface PlayableSourceOptions {

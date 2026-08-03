@@ -1,7 +1,15 @@
-import type { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import type {
+    ChatInputCommandInteraction,
+    RESTPostAPIChatInputApplicationCommandsJSONBody,
+} from 'discord.js';
+
+export interface CommandData {
+    readonly name: string;
+    toJSON(): RESTPostAPIChatInputApplicationCommandsJSONBody;
+}
 
 export interface Command {
-    readonly data: SlashCommandBuilder;
+    readonly data: CommandData;
     readonly deferReply?: boolean;
     readonly ephemeral?: boolean;
     execute(interaction: ChatInputCommandInteraction): Promise<void>;

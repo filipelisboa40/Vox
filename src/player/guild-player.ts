@@ -7,6 +7,8 @@ import {
 } from '@discordjs/voice';
 import type { Logger } from 'pino';
 
+import type { PlaybackController } from './playback-controller.js';
+
 const reconnectTimeoutMs = 5_000;
 
 export interface GuildPlayerOptions {
@@ -16,6 +18,7 @@ export interface GuildPlayerOptions {
     readonly audioPlayer: AudioPlayer;
     readonly logger: Logger;
     readonly onDestroyed: () => void;
+    readonly playback?: PlaybackController;
 }
 
 export class GuildPlayer {
@@ -24,6 +27,7 @@ export class GuildPlayer {
     public readonly connection: VoiceConnection;
     public readonly audioPlayer: AudioPlayer;
     readonly #logger: Logger;
+    public readonly playback: PlaybackController | undefined;
     #destroyed = false;
 
     public constructor(options: GuildPlayerOptions) {
@@ -32,18 +36,23 @@ export class GuildPlayer {
         this.connection = options.connection;
         this.audioPlayer = options.audioPlayer;
         this.#logger = options.logger;
+        this.playback = options.playback;
 
         this.connection.subscribe(this.audioPlayer);
         this.#registerLifecycleHandlers(options.onDestroyed);
     }
 
-    public destroy(): void {
+    public async destroy(): Promise<void> {
         if (this.#destroyed) {
             return;
         }
 
         this.#destroyed = true;
-        this.audioPlayer.stop(true);
+        await this.playback?.dispose();
+
+        if (this.playback === undefined) {
+            this.audioPlayer.stop(true);
+        }
 
         if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
             this.connection.destroy();
@@ -61,7 +70,12 @@ export class GuildPlayer {
         this.connection.on(VoiceConnectionStatus.Disconnected, () => {
             void this.#recoverConnection().catch((error: unknown) => {
                 this.#logger.warn({ error, guildId: this.guildId }, 'Voice reconnection failed');
-                this.destroy();
+                void this.destroy().catch((destroyError: unknown) => {
+                    this.#logger.error(
+                        { error: destroyError, guildId: this.guildId },
+                        'Guild player cleanup failed',
+                    );
+                });
             });
         });
 
