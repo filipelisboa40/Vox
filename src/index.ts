@@ -6,13 +6,15 @@ import { commandRegistry } from './commands/index.js';
 import { readEnvironment } from './config/environment.js';
 import { registerInteractionHandler } from './interactions/register-interaction-handler.js';
 import { logger } from './logger.js';
+import { PlayerManager } from './player/player-manager.js';
 
 async function start(): Promise<void> {
     const environment = readEnvironment();
     const client = createDiscordClient(logger);
+    const playerManager = new PlayerManager(logger);
 
     registerInteractionHandler(client, commandRegistry, logger);
-    registerShutdownHandlers(client, logger);
+    registerShutdownHandlers(client, logger, () => playerManager.destroyAll());
     await client.login(environment.discordToken);
 }
 

@@ -3,7 +3,11 @@ import type { Logger } from 'pino';
 
 const shutdownSignals = ['SIGINT', 'SIGTERM'] as const;
 
-export function registerShutdownHandlers(client: Client, logger: Logger): void {
+export function registerShutdownHandlers(
+    client: Client,
+    logger: Logger,
+    beforeClientDestroy?: () => void | Promise<void>,
+): void {
     let isShuttingDown = false;
 
     const shutdown = async (signal: (typeof shutdownSignals)[number]): Promise<void> => {
@@ -13,6 +17,7 @@ export function registerShutdownHandlers(client: Client, logger: Logger): void {
 
         isShuttingDown = true;
         logger.info({ signal }, 'Shutting down Discord client');
+        await beforeClientDestroy?.();
         await client.destroy();
     };
 
