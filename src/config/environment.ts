@@ -1,0 +1,46 @@
+import { z } from 'zod';
+
+const snowflakeSchema = z.string().regex(/^\d{17,20}$/, 'must be a valid Discord snowflake');
+
+const environmentSchema = z.object({
+    DISCORD_TOKEN: z.string().trim().min(1, 'is required'),
+    DISCORD_CLIENT_ID: snowflakeSchema,
+    DISCORD_GUILD_ID: z.preprocess(
+        (value) => (value === '' ? undefined : value),
+        snowflakeSchema.optional(),
+    ),
+});
+
+export interface Environment {
+    discordToken: string;
+    discordClientId: string;
+    discordGuildId?: string;
+}
+
+export class ConfigurationError extends Error {
+    public constructor(fields: readonly string[]) {
+        super(`Invalid environment configuration: ${fields.join(', ')}`);
+        this.name = 'ConfigurationError';
+    }
+}
+
+export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
+    const result = environmentSchema.safeParse(input);
+
+    if (!result.success) {
+        const fields = [...new Set(result.error.issues.map((issue) => issue.path.join('.')))];
+        throw new ConfigurationError(fields);
+    }
+
+    return {
+        discordToken: result.data.DISCORD_TOKEN,
+        discordClientId: result.data.DISCORD_CLIENT_ID,
+        ...(result.data.DISCORD_GUILD_ID === undefined
+            ? {}
+            : { discordGuildId: result.data.DISCORD_GUILD_ID }),
+    };
+}
+
+export function readEnvironment(): Environment {
+    return parseEnvironment(process.env);
+}

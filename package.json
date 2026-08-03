@@ -1,32 +1,39 @@
 {
-  "name": "vox",
-  "version": "0.1.0",
-  "private": true,
-  "description": "A TypeScript Discord music bot.",
-  "type": "module",
-  "main": "dist/index.js",
-  "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
-  },
-  "engines": {
-    "node": ">=24.0.0"
-  },
-  "packageManager": "pnpm@11.9.0",
-  "devDependencies": {
-    "@eslint/js": "^9.0.0",
-    "@types/node": "^24.0.0",
-    "eslint": "^9.0.0",
-    "prettier": "^3.0.0",
-    "tsx": "^4.0.0",
-    "typescript": "^5.0.0",
-    "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0"
-  }
+    "name": "vox",
+    "version": "0.1.0",
+    "private": true,
+    "description": "A TypeScript Discord music bot.",
+    "type": "module",
+    "main": "dist/index.js",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc -p tsconfig.json",
+        "start": "node dist/index.js",
+        "deploy:commands": "tsx src/deploy-commands.ts",
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "typecheck": "tsc -p tsconfig.json --noEmit",
+        "test": "vitest run"
+    },
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "packageManager": "pnpm@11.9.0",
+    "dependencies": {
+        "discord.js": "^14.0.0",
+        "dotenv": "^17.0.0",
+        "pino": "^9.0.0",
+        "zod": "^4.0.0"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.0.0",
+        "@types/node": "^24.0.0",
+        "eslint": "^9.0.0",
+        "prettier": "^3.0.0",
+        "tsx": "^4.0.0",
+        "typescript": "^5.0.0",
+        "typescript-eslint": "^8.0.0",
+        "vitest": "^3.0.0"
+    }
 }
