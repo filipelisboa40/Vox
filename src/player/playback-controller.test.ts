@@ -12,6 +12,7 @@ interface ResourceFixture {
     readonly play: ReturnType<typeof vi.fn>;
     readonly dispose: ReturnType<typeof vi.fn>;
     readonly stop: ReturnType<typeof vi.fn>;
+    readonly seek: ReturnType<typeof vi.fn>;
     clearCurrent(): void;
 }
 
@@ -32,14 +33,24 @@ function createResourceFixture(results: readonly boolean[] = [true]): ResourceFi
         currentTrack = undefined;
         return Promise.resolve();
     });
-    const resources = { play, dispose, stop } as unknown as AudioResourceManager;
+    const seek = vi.fn().mockResolvedValue(true);
+    const resources = {
+        play,
+        dispose,
+        stop,
+        seek,
+        supportsSeeking: () => true,
+    } as unknown as AudioResourceManager;
     Object.defineProperty(resources, 'currentTrack', { get: () => currentTrack });
+    Object.defineProperty(resources, 'playbackPositionMs', { get: () => 42_000 });
+    Object.defineProperty(resources, 'volume', { get: () => 1 });
 
     return {
         resources,
         play,
         dispose,
         stop,
+        seek,
         clearCurrent: () => {
             currentTrack = undefined;
         },
@@ -118,6 +129,130 @@ describe('PlaybackController', () => {
         await expect(controller.enqueue(createTrack('broken'))).resolves.toEqual({
             status: 'failed',
         });
+    });
+
+    it('replays and seeks without changing queue or loop state', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const current = createTrack('current');
+        const waiting = createTrack('waiting');
+        await controller.enqueue(current);
+        await controller.enqueue(waiting);
+        controller.setLoopMode(LoopMode.Track);
+
+        await expect(controller.replay()).resolves.toEqual({ status: 'seeked', positionMs: 0 });
+        await expect(controller.seek(60_000)).resolves.toEqual({
+            status: 'seeked',
+            positionMs: 60_000,
+        });
+        expect(resources.seek).toHaveBeenNthCalledWith(1, 0);
+        expect(resources.seek).toHaveBeenNthCalledWith(2, 60_000);
+        expect(controller.queue.snapshot()).toEqual([waiting]);
+        expect(controller.loopMode).toBe(LoopMode.Track);
+    });
+
+    it('clamps backward relative seeks to zero and rejects known duration overflow', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        await controller.enqueue(createTrack('current'));
+
+        await expect(controller.seekRelative(-100_000)).resolves.toEqual({
+            status: 'seeked',
+            positionMs: 0,
+        });
+        await expect(controller.seek(180_000)).resolves.toEqual({ status: 'out-of-range' });
+    });
+
+    it('reports provider-restricted seeking', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        await controller.enqueue(createTrack('current'));
+        vi.spyOn(resources.resources, 'supportsSeeking').mockReturnValue(false);
+
+        await expect(controller.seek(10_000)).resolves.toEqual({ status: 'unsupported' });
+    });
+
+    it('skips to the next track and records the playback position', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const first = createTrack('first');
+        const second = createTrack('second');
+        await controller.enqueue(first);
+        await controller.enqueue(second);
+
+        await expect(controller.skip()).resolves.toEqual({
+            status: 'skipped',
+            skipped: first,
+            next: second,
+        });
+        expect(controller.skipHistory.peek()).toEqual({ track: first, positionMs: 42_000 });
+        expect(resources.stop).toHaveBeenCalledOnce();
+        expect(controller.currentTrack).toBe(second);
+    });
+
+    it('skips the current track when the queue is empty', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const track = createTrack('only');
+        await controller.enqueue(track);
+
+        await expect(controller.skip()).resolves.toEqual({ status: 'skipped', skipped: track });
+        expect(controller.currentTrack).toBeUndefined();
+        expect(controller.skipHistory.size).toBe(1);
+    });
+
+    it('reports skip while nothing is playing', async () => {
+        const controller = new PlaybackController(
+            createResourceFixture().resources,
+            createLogger(),
+        );
+
+        await expect(controller.skip()).resolves.toEqual({ status: 'nothing-playing' });
+    });
+
+    it('restores the latest skipped track and returns the interrupted track to the front', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const first = createTrack('first');
+        const second = createTrack('second');
+        const third = createTrack('third');
+        await controller.enqueue(first);
+        await controller.enqueue(second);
+        await controller.enqueue(third);
+        await controller.skip();
+
+        await expect(controller.unskip()).resolves.toEqual({
+            status: 'restored',
+            track: first,
+            positionMs: 42_000,
+        });
+        expect(resources.play).toHaveBeenLastCalledWith(first, { startPositionMs: 42_000 });
+        expect(controller.currentTrack).toBe(first);
+        expect(controller.queue.snapshot()).toEqual([second, third]);
+        expect(controller.skipHistory.size).toBe(0);
+    });
+
+    it('restores history when an unskip playback attempt fails', async () => {
+        const resources = createResourceFixture([true, false]);
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const current = createTrack('current');
+        const skipped = createTrack('skipped');
+        await controller.enqueue(current);
+        controller.skipHistory.push({ track: skipped, positionMs: 1_000 });
+
+        await expect(controller.unskip()).resolves.toEqual({ status: 'failed' });
+        expect(controller.currentTrack).toBe(current);
+        expect(controller.queue.isEmpty).toBe(true);
+        expect(controller.skipHistory.peek()).toEqual({ track: skipped, positionMs: 1_000 });
+    });
+
+    it('reports unskip without history', async () => {
+        const controller = new PlaybackController(
+            createResourceFixture().resources,
+            createLogger(),
+        );
+
+        await expect(controller.unskip()).resolves.toEqual({ status: 'nothing-to-unskip' });
     });
 
     it('stops playback and resets queue, history, and loop state', async () => {

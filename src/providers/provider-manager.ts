@@ -80,6 +80,10 @@ export class ProviderManager {
         );
     }
 
+    public canSeek(track: ProviderTrack): boolean {
+        return this.#providersByName.get(track.provider)?.supportsSeeking === true;
+    }
+
     async #runProviderOperation<T>(
         provider: AudioProvider,
         operation: () => Promise<T>,

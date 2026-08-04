@@ -30,6 +30,7 @@ export interface PlayableSourceOptions {
 
 export interface AudioProvider {
     readonly name: string;
+    readonly supportsSeeking?: boolean;
     canHandleUrl(url: URL): boolean;
     search(query: string): Promise<ProviderTrack>;
     resolveUrl(url: URL): Promise<ProviderTrack>;

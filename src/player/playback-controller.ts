@@ -11,6 +11,22 @@ export type EnqueueResult =
     | { readonly status: 'queued'; readonly position: number }
     | { readonly status: 'failed' };
 
+export type SkipResult =
+    | { readonly status: 'nothing-playing' }
+    | { readonly status: 'skipped'; readonly skipped: Track; readonly next?: Track };
+
+export type UnskipResult =
+    | { readonly status: 'nothing-to-unskip' }
+    | { readonly status: 'restored'; readonly track: Track; readonly positionMs: number }
+    | { readonly status: 'failed' };
+
+export type SeekResult =
+    | { readonly status: 'nothing-playing' }
+    | { readonly status: 'unsupported' }
+    | { readonly status: 'out-of-range' }
+    | { readonly status: 'failed' }
+    | { readonly status: 'seeked'; readonly positionMs: number };
+
 export class PlaybackController {
     public readonly queue = new QueueManager();
     public readonly skipHistory = new SkipHistory();
@@ -34,6 +50,14 @@ export class PlaybackController {
         return this.#loopMode;
     }
 
+    public get playbackPositionMs(): number {
+        return this.#audioResources.playbackPositionMs;
+    }
+
+    public get volume(): number {
+        return this.#audioResources.volume;
+    }
+
     public setLoopMode(loopMode: LoopMode): void {
         this.#loopMode = loopMode;
     }
@@ -44,6 +68,87 @@ export class PlaybackController {
 
     public resume(): boolean {
         return this.#audioResources.resume();
+    }
+
+    public replay(): Promise<SeekResult> {
+        return this.seek(0);
+    }
+
+    public async seek(positionMs: number): Promise<SeekResult> {
+        const track = this.currentTrack;
+
+        if (track === undefined) {
+            return { status: 'nothing-playing' };
+        }
+
+        if (!Number.isFinite(positionMs) || positionMs < 0) {
+            return { status: 'out-of-range' };
+        }
+
+        if (track.durationMs !== null && positionMs >= track.durationMs) {
+            return { status: 'out-of-range' };
+        }
+
+        if (!this.#audioResources.supportsSeeking(track)) {
+            return { status: 'unsupported' };
+        }
+
+        return (await this.#audioResources.seek(positionMs))
+            ? { status: 'seeked', positionMs }
+            : { status: 'failed' };
+    }
+
+    public seekRelative(amountMs: number): Promise<SeekResult> {
+        if (!Number.isFinite(amountMs)) {
+            return Promise.resolve({ status: 'out-of-range' });
+        }
+
+        return this.seek(Math.max(0, this.playbackPositionMs + amountMs));
+    }
+
+    public async skip(): Promise<SkipResult> {
+        const skipped = this.currentTrack;
+
+        if (skipped === undefined) {
+            return { status: 'nothing-playing' };
+        }
+
+        this.skipHistory.push({
+            track: skipped,
+            positionMs: this.#audioResources.playbackPositionMs,
+        });
+        await this.#audioResources.stop();
+        await this.advance();
+
+        return {
+            status: 'skipped',
+            skipped,
+            ...(this.currentTrack === undefined ? {} : { next: this.currentTrack }),
+        };
+    }
+
+    public async unskip(): Promise<UnskipResult> {
+        const record = this.skipHistory.pop();
+
+        if (record === undefined) {
+            return { status: 'nothing-to-unskip' };
+        }
+
+        const interrupted = this.currentTrack;
+        const restored = await this.#audioResources.play(record.track, {
+            startPositionMs: record.positionMs,
+        });
+
+        if (!restored) {
+            this.skipHistory.push(record);
+            return { status: 'failed' };
+        }
+
+        if (interrupted !== undefined) {
+            this.queue.addFirst(interrupted);
+        }
+
+        return { status: 'restored', track: record.track, positionMs: record.positionMs };
     }
 
     public async enqueue(track: Track): Promise<EnqueueResult> {

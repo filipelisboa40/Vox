@@ -14,6 +14,7 @@ import {
 import type { ProviderTrack } from '../../providers/audio-provider.js';
 import { MediaProviderError } from '../../providers/provider-errors.js';
 import { escapeDiscordFormatting } from '../../utilities/external-text.js';
+import { formatDuration } from '../../utilities/playback-format.js';
 import type { Command } from '../command.js';
 
 export interface TrackResolver {
@@ -103,19 +104,4 @@ function formatPlayResponse(
         case 'failed':
             return `Could not play ${trackDetails}`;
     }
-}
-
-function formatDuration(durationMs: number | null): string {
-    if (durationMs === null) {
-        return 'unknown duration';
-    }
-
-    const totalSeconds = Math.floor(durationMs / 1_000);
-    const hours = Math.floor(totalSeconds / 3_600);
-    const minutes = Math.floor((totalSeconds % 3_600) / 60);
-    const seconds = totalSeconds % 60;
-
-    return hours > 0
-        ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
-        : `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }

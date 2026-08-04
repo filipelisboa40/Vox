@@ -98,6 +98,7 @@ function createResourceFixture(): ResourceFixture {
         receivedInputTypes.push(options.inputType);
         const resource = {
             metadata: options.metadata,
+            playbackDuration: 0,
             volume: { setVolume },
         } as unknown as AudioResource<Track>;
         resources.push(resource);
@@ -116,6 +117,7 @@ function createProvider(sources: readonly PlayableSource[]): {
     const requestedTracks: ProviderTrack[] = [];
     const requestedPositions: Array<number | undefined> = [];
     const provider: PlayableSourceProvider = {
+        canSeek: () => true,
         createPlayableSource: (track, options) => {
             requestedTracks.push(track);
             requestedPositions.push(options?.startPositionMs);
@@ -171,6 +173,31 @@ describe('AudioResourceManager', () => {
         expect(manager.pause()).toBe(false);
         player.setStatus(AudioPlayerStatus.Paused);
         expect(manager.resume()).toBe(false);
+    });
+
+    it('preserves paused state and effective position when replacing a resource for seeking', async () => {
+        const player = createAudioPlayerFixture();
+        const firstSource = createSource();
+        const secondSource = createSource();
+        const provider = createProvider([firstSource.source, secondSource.source]);
+        const resources = createResourceFixture();
+        const manager = new AudioResourceManager({
+            audioPlayer: player.audioPlayer,
+            provider: provider.provider,
+            logger: createLogger(),
+            resourceFactory: resources.factory,
+        });
+        await manager.play(createTrack('song'));
+        player.setStatus(AudioPlayerStatus.Paused);
+
+        await expect(manager.seek(60_000)).resolves.toBe(true);
+
+        expect(provider.requestedPositions).toEqual([undefined, 60_000]);
+        expect(player.pause).toHaveBeenCalledOnce();
+        player.setStatus(AudioPlayerStatus.Playing);
+        player.emitter.emit(AudioPlayerStatus.Playing);
+        expect(player.pause).toHaveBeenCalledTimes(2);
+        expect(manager.playbackPositionMs).toBe(60_000);
     });
 
     it('creates and plays an inline-volume resource with a requested offset', async () => {

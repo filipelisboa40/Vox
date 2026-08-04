@@ -36,6 +36,17 @@ describe('QueueManager', () => {
         expect(queue.isEmpty).toBe(true);
     });
 
+    it('adds a track to the front of the queue', () => {
+        const queue = new QueueManager();
+        const first = createTrack('first');
+        const urgent = createTrack('urgent');
+        queue.add(first);
+
+        queue.addFirst(urgent);
+
+        expect(queue.snapshot()).toEqual([urgent, first]);
+    });
+
     it('removes a selected waiting track', () => {
         const queue = new QueueManager();
         const tracks = [createTrack('a'), createTrack('b'), createTrack('c')];

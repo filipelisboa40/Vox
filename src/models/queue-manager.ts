@@ -16,6 +16,10 @@ export class QueueManager {
         return this.#waitingTracks.length - 1;
     }
 
+    public addFirst(track: Track): void {
+        this.#waitingTracks.unshift(track);
+    }
+
     public peek(): Track | undefined {
         return this.#waitingTracks[0];
     }

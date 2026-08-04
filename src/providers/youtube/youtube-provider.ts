@@ -1,10 +1,13 @@
 import { z } from 'zod';
+import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
+import ffmpegPath from 'ffmpeg-static';
 
 import {
     AudioSourceFormat,
     type AudioProvider,
     type PlayableSource,
+    type PlayableSourceOptions,
     type ProviderTrack,
 } from '../audio-provider.js';
 import {
@@ -74,6 +77,7 @@ export interface YouTubeProviderOptions {
 
 export class YouTubeProvider implements AudioProvider {
     public readonly name = 'youtube';
+    public readonly supportsSeeking = true;
     readonly #apiKey: string;
     readonly #lavalinkUrl: URL;
     readonly #lavalinkPassword: string;
@@ -149,7 +153,10 @@ export class YouTubeProvider implements AudioProvider {
         return this.#mapVideo(video);
     }
 
-    public async createPlayableSource(track: ProviderTrack): Promise<PlayableSource> {
+    public async createPlayableSource(
+        track: ProviderTrack,
+        options: PlayableSourceOptions = {},
+    ): Promise<PlayableSource> {
         if (track.provider !== this.name || !youtubeVideoIdPattern.test(track.providerTrackId)) {
             throw new MediaStreamError('The track is not a valid YouTube track');
         }
@@ -204,6 +211,18 @@ export class YouTubeProvider implements AudioProvider {
         if (audio.byteLength > maximumPlayableSourceBytes) {
             abortController.abort();
             throw new MediaStreamError('The Lavalink audio response is too large to buffer');
+        }
+
+        const positionMs = options.startPositionMs ?? 0;
+
+        if (!Number.isFinite(positionMs) || positionMs < 0) {
+            abortController.abort();
+            throw new MediaStreamError('The requested playback position is invalid');
+        }
+
+        if (positionMs > 0) {
+            abortController.abort();
+            return createSeekedSource(audio, positionMs);
         }
 
         const stream = Readable.from([audio]);
@@ -322,6 +341,44 @@ export class YouTubeProvider implements AudioProvider {
 
         return parsedPayload.data;
     }
+}
+
+function createSeekedSource(audio: Buffer, positionMs: number): PlayableSource {
+    if (ffmpegPath === null) {
+        throw new MediaStreamError('FFmpeg is required for seeking');
+    }
+
+    const process = spawn(
+        ffmpegPath,
+        [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-ss',
+            (positionMs / 1_000).toFixed(3),
+            '-i',
+            'pipe:0',
+            '-vn',
+            '-c:a',
+            'libopus',
+            '-f',
+            'ogg',
+            'pipe:1',
+        ],
+        { stdio: ['pipe', 'pipe', 'ignore'] },
+    );
+    const stream = process.stdout;
+    process.once('error', (error) => stream.destroy(error));
+    process.stdin.end(audio);
+
+    return {
+        stream,
+        format: AudioSourceFormat.OggOpus,
+        dispose: () => {
+            stream.destroy();
+            process.kill();
+        },
+    };
 }
 
 function ensureTrailingSlash(url: URL): URL {

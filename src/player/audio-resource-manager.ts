@@ -22,6 +22,7 @@ export interface PlayableSourceProvider {
         track: ProviderTrack,
         options?: PlayableSourceOptions,
     ): Promise<PlayableSource>;
+    canSeek?(track: ProviderTrack): boolean;
 }
 
 export interface PlayOptions {
@@ -51,6 +52,7 @@ interface ManagedResource {
     readonly track: Track;
     readonly source: PlayableSource;
     readonly resource: AudioResource<Track>;
+    readonly startPositionMs: number;
     disposed: boolean;
 }
 
@@ -63,6 +65,8 @@ export class AudioResourceManager {
     readonly #onTrackFailed: ((track: Track, error: unknown) => void | Promise<void>) | undefined;
     #current: ManagedResource | undefined;
     #requestGeneration = 0;
+    #volume = 1;
+    #pauseWhenPlaying = false;
 
     public constructor(options: AudioResourceManagerOptions) {
         this.#audioPlayer = options.audioPlayer;
@@ -76,6 +80,16 @@ export class AudioResourceManager {
 
     public get currentTrack(): Track | undefined {
         return this.#current?.track;
+    }
+
+    public get playbackPositionMs(): number {
+        return this.#current === undefined
+            ? 0
+            : this.#current.startPositionMs + this.#current.resource.playbackDuration;
+    }
+
+    public get volume(): number {
+        return this.#volume;
     }
 
     public pause(): boolean {
@@ -98,6 +112,27 @@ export class AudioResourceManager {
         }
 
         return this.#audioPlayer.unpause();
+    }
+
+    public supportsSeeking(track: Track): boolean {
+        return this.#provider.canSeek?.(toProviderTrack(track)) === true;
+    }
+
+    public async seek(positionMs: number): Promise<boolean> {
+        const track = this.currentTrack;
+
+        if (track === undefined || !this.supportsSeeking(track)) {
+            return false;
+        }
+
+        const wasPaused = this.#audioPlayer.state.status === AudioPlayerStatus.Paused;
+        const started = await this.play(track, { startPositionMs: positionMs });
+
+        if (started && wasPaused) {
+            this.#pauseWhenPlaying = !this.#audioPlayer.pause();
+        }
+
+        return started;
     }
 
     public async play(track: Track, options: PlayOptions = {}): Promise<boolean> {
@@ -133,8 +168,15 @@ export class AudioResourceManager {
                 throw new Error('Inline volume was not created for the audio resource');
             }
 
-            resource.volume.setVolume(validateVolume(options.volume ?? 1));
-            managedResource = { track, source, resource, disposed: false };
+            this.#volume = validateVolume(options.volume ?? this.#volume);
+            resource.volume.setVolume(this.#volume);
+            managedResource = {
+                track,
+                source,
+                resource,
+                startPositionMs: options.startPositionMs ?? track.startPositionMs ?? 0,
+                disposed: false,
+            };
         } catch (error: unknown) {
             await disposeSource(source);
             await this.#notifyFailure(track, error);
@@ -159,6 +201,7 @@ export class AudioResourceManager {
 
     public async stop(): Promise<void> {
         this.#requestGeneration += 1;
+        this.#pauseWhenPlaying = false;
         const current = this.#current;
         this.#current = undefined;
         this.#audioPlayer.stop(true);
@@ -170,6 +213,13 @@ export class AudioResourceManager {
     }
 
     #registerPlayerHandlers(): void {
+        this.#audioPlayer.on(AudioPlayerStatus.Playing, () => {
+            if (this.#pauseWhenPlaying) {
+                this.#pauseWhenPlaying = false;
+                this.#audioPlayer.pause();
+            }
+        });
+
         this.#audioPlayer.on(AudioPlayerStatus.Idle, (oldState) => {
             const completed = this.#current;
 
