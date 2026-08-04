@@ -45,6 +45,7 @@ Copy `.env.example` to `.env` and provide the Discord application values from th
 | `YOUTUBE_API_KEY`   | Yes      | YouTube Data API v3 key for search and metadata      |
 | `LAVALINK_URL`      | Yes      | Base URL of the Lavalink media server                |
 | `LAVALINK_PASSWORD` | Yes      | Password configured on the Lavalink server           |
+| `DEFAULT_VOLUME`    | No       | Initial per-server volume from 0–100; defaults to 50 |
 | `DISCORD_GUILD_ID`  | No       | Development server ID for future command deploys     |
 | `YOUTUBE_REGION`    | No       | Two-letter region for search and availability checks |
 | `LOG_LEVEL`         | No       | Pino logging level; defaults to `info`               |

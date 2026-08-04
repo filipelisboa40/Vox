@@ -37,6 +37,7 @@ export interface AudioResourceManagerOptions {
     readonly resourceFactory?: AudioResourceFactory;
     readonly onTrackFinished?: (track: Track) => void | Promise<void>;
     readonly onTrackFailed?: (track: Track, error: unknown) => void | Promise<void>;
+    readonly defaultVolume?: number;
 }
 
 export type AudioResourceFactory = (
@@ -65,7 +66,7 @@ export class AudioResourceManager {
     readonly #onTrackFailed: ((track: Track, error: unknown) => void | Promise<void>) | undefined;
     #current: ManagedResource | undefined;
     #requestGeneration = 0;
-    #volume = 1;
+    #volume: number;
     #pauseWhenPlaying = false;
 
     public constructor(options: AudioResourceManagerOptions) {
@@ -75,6 +76,7 @@ export class AudioResourceManager {
         this.#resourceFactory = options.resourceFactory ?? createAudioResource;
         this.#onTrackFinished = options.onTrackFinished;
         this.#onTrackFailed = options.onTrackFailed;
+        this.#volume = validateVolume(options.defaultVolume ?? 0.5);
         this.#registerPlayerHandlers();
     }
 
@@ -112,6 +114,11 @@ export class AudioResourceManager {
         }
 
         return this.#audioPlayer.unpause();
+    }
+
+    public setVolume(volume: number): void {
+        this.#volume = validateVolume(volume);
+        this.#current?.resource.volume?.setVolume(this.#volume);
     }
 
     public supportsSeeking(track: Track): boolean {

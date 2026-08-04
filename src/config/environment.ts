@@ -8,6 +8,10 @@ const environmentSchema = z.object({
     YOUTUBE_API_KEY: z.string().trim().min(1, 'is required'),
     LAVALINK_URL: z.string().trim().url('must be a valid URL'),
     LAVALINK_PASSWORD: z.string().trim().min(1, 'is required'),
+    DEFAULT_VOLUME: z.preprocess(
+        (value) => (value === undefined || value === '' ? 50 : Number(value)),
+        z.number().int().min(0).max(100),
+    ),
     DISCORD_GUILD_ID: z.preprocess(
         (value) => (value === '' ? undefined : value),
         snowflakeSchema.optional(),
@@ -24,6 +28,7 @@ export interface Environment {
     youtubeApiKey: string;
     lavalinkUrl: string;
     lavalinkPassword: string;
+    defaultVolume: number;
     discordGuildId?: string;
     youtubeRegion?: string;
 }
@@ -49,6 +54,7 @@ export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
         youtubeApiKey: result.data.YOUTUBE_API_KEY,
         lavalinkUrl: result.data.LAVALINK_URL,
         lavalinkPassword: result.data.LAVALINK_PASSWORD,
+        defaultVolume: result.data.DEFAULT_VOLUME,
         ...(result.data.DISCORD_GUILD_ID === undefined
             ? {}
             : { discordGuildId: result.data.DISCORD_GUILD_ID }),

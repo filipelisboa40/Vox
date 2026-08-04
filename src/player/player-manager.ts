@@ -117,6 +117,7 @@ function createDefaultGuildPlayer(logger: Logger): GuildPlayerFactory {
 export function createManagedGuildPlayerFactory(
     logger: Logger,
     providerManager: ProviderManager,
+    defaultVolume = 0.5,
 ): GuildPlayerFactory {
     return (options, onDestroyed) => {
         const connection = joinVoiceChannel({
@@ -135,6 +136,7 @@ export function createManagedGuildPlayerFactory(
             logger,
             onTrackFinished: () => playbackReference.current?.advance(),
             onTrackFailed: () => playbackReference.current?.advance(),
+            defaultVolume,
         });
         const playback = new PlaybackController(audioResources, logger);
         playbackReference.current = playback;
@@ -144,6 +146,7 @@ export function createManagedGuildPlayerFactory(
             connection,
             audioPlayer,
             playback,
+            defaultVolume,
             logger,
             onDestroyed,
         });

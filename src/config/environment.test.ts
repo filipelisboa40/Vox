@@ -18,7 +18,19 @@ describe('parseEnvironment', () => {
             youtubeApiKey: validInput.YOUTUBE_API_KEY,
             lavalinkUrl: validInput.LAVALINK_URL,
             lavalinkPassword: validInput.LAVALINK_PASSWORD,
+            defaultVolume: 50,
         });
+    });
+
+    it('validates and returns a configured default volume', () => {
+        expect(parseEnvironment({ ...validInput, DEFAULT_VOLUME: '0' }).defaultVolume).toBe(0);
+        expect(parseEnvironment({ ...validInput, DEFAULT_VOLUME: '100' }).defaultVolume).toBe(100);
+        expect(() => parseEnvironment({ ...validInput, DEFAULT_VOLUME: '101' })).toThrow(
+            ConfigurationError,
+        );
+        expect(() => parseEnvironment({ ...validInput, DEFAULT_VOLUME: '10.5' })).toThrow(
+            ConfigurationError,
+        );
     });
 
     it('normalizes an optional YouTube region', () => {

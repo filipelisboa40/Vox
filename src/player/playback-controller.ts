@@ -70,6 +70,10 @@ export class PlaybackController {
         return this.#audioResources.resume();
     }
 
+    public setVolume(volume: number): void {
+        this.#audioResources.setVolume(volume);
+    }
+
     public replay(): Promise<SeekResult> {
         return this.seek(0);
     }

@@ -9,12 +9,23 @@ import {
 } from './information/queue-information-commands.js';
 import { createPlayCommand, playCommandData } from './play/play-command.js';
 import {
+    clearCommandData,
+    createClearCommand,
+    createMoveCommand,
+    createRemoveCommand,
+    createShuffleCommand,
+    moveCommandData,
+    removeCommandData,
+    shuffleCommandData,
+} from './queue/queue-editing-commands.js';
+import {
     createPauseCommand,
     createResumeCommand,
     pauseCommandData,
     resumeCommandData,
 } from './playback/pause-resume-commands.js';
 import { createStopCommand, stopCommandData } from './playback/stop-command.js';
+import { createVolumeCommand, volumeCommandData } from './playback/volume-command.js';
 import {
     createAbsoluteSeekCommand,
     createForwardSeekCommand,
@@ -46,6 +57,11 @@ export const commandDefinitions = [
     replayCommandData,
     seekCommandData,
     forwardSeekCommandData,
+    volumeCommandData,
+    clearCommandData,
+    removeCommandData,
+    moveCommandData,
+    shuffleCommandData,
 ] as const;
 
 export function createCommandRegistry(dependencies: {
@@ -65,5 +81,10 @@ export function createCommandRegistry(dependencies: {
         createReplayCommand({ players: dependencies.players }),
         createAbsoluteSeekCommand({ players: dependencies.players }),
         createForwardSeekCommand({ players: dependencies.players }),
+        createVolumeCommand({ players: dependencies.players }),
+        createClearCommand({ players: dependencies.players }),
+        createRemoveCommand({ players: dependencies.players }),
+        createMoveCommand({ players: dependencies.players }),
+        createShuffleCommand({ players: dependencies.players }),
     ]);
 }

@@ -222,6 +222,51 @@ describe('AudioResourceManager', () => {
         expect(player.play).toHaveBeenCalledWith(resources.resources[0]);
     });
 
+    it('applies volume immediately and preserves it across replacement resources', async () => {
+        const player = createAudioPlayerFixture();
+        const resources = createResourceFixture();
+        const manager = new AudioResourceManager({
+            audioPlayer: player.audioPlayer,
+            provider: createProvider([createSource().source, createSource().source]).provider,
+            logger: createLogger(),
+            resourceFactory: resources.factory,
+            defaultVolume: 0.5,
+        });
+        await manager.play(createTrack('first'));
+
+        manager.setVolume(0);
+        await manager.play(createTrack('second'));
+
+        expect(resources.setVolume).toHaveBeenNthCalledWith(1, 0.5);
+        expect(resources.setVolume).toHaveBeenNthCalledWith(2, 0);
+        expect(resources.setVolume).toHaveBeenNthCalledWith(3, 0);
+        expect(manager.volume).toBe(0);
+        expect(player.pause).not.toHaveBeenCalled();
+    });
+
+    it('validates volume boundaries and keeps guild resource managers isolated', () => {
+        const first = new AudioResourceManager({
+            audioPlayer: createAudioPlayerFixture().audioPlayer,
+            provider: createProvider([]).provider,
+            logger: createLogger(),
+            defaultVolume: 0,
+        });
+        const second = new AudioResourceManager({
+            audioPlayer: createAudioPlayerFixture().audioPlayer,
+            provider: createProvider([]).provider,
+            logger: createLogger(),
+            defaultVolume: 1,
+        });
+
+        expect(first.volume).toBe(0);
+        expect(second.volume).toBe(1);
+        first.setVolume(0.25);
+        expect(first.volume).toBe(0.25);
+        expect(second.volume).toBe(1);
+        expect(() => first.setVolume(-0.01)).toThrow(RangeError);
+        expect(() => first.setVolume(1.01)).toThrow(RangeError);
+    });
+
     it('disposes the previous source after replacement', async () => {
         const player = createAudioPlayerFixture();
         const firstSource = createSource();
