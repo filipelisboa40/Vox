@@ -5,9 +5,6 @@ import { ConfigurationError, parseEnvironment } from './environment.js';
 const validInput = {
     DISCORD_TOKEN: 'test-token-that-must-never-appear-in-errors',
     DISCORD_CLIENT_ID: '123456789012345678',
-    YOUTUBE_API_KEY: 'youtube-test-key',
-    LAVALINK_URL: 'http://localhost:2333',
-    LAVALINK_PASSWORD: 'lavalink-test-password',
 };
 
 describe('parseEnvironment', () => {
@@ -15,10 +12,7 @@ describe('parseEnvironment', () => {
         expect(parseEnvironment(validInput)).toEqual({
             discordToken: validInput.DISCORD_TOKEN,
             discordClientId: validInput.DISCORD_CLIENT_ID,
-            youtubeApiKey: validInput.YOUTUBE_API_KEY,
-            lavalinkUrl: validInput.LAVALINK_URL,
-            lavalinkPassword: validInput.LAVALINK_PASSWORD,
-            defaultVolume: 50,
+            defaultVolume: 10,
             idleDisconnectMs: 300_000,
         });
     });
@@ -46,9 +40,11 @@ describe('parseEnvironment', () => {
         );
     });
 
-    it('normalizes an optional YouTube region', () => {
-        expect(parseEnvironment({ ...validInput, YOUTUBE_REGION: 'pt' })).toMatchObject({
-            youtubeRegion: 'PT',
+    it('accepts an optional yt-dlp executable path', () => {
+        expect(
+            parseEnvironment({ ...validInput, YT_DLP_PATH: 'C:\\tools\\yt-dlp.exe' }),
+        ).toMatchObject({
+            ytDlpPath: 'C:\\tools\\yt-dlp.exe',
         });
     });
 

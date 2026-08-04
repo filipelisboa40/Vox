@@ -5,11 +5,8 @@ const snowflakeSchema = z.string().regex(/^\d{17,20}$/, 'must be a valid Discord
 const environmentSchema = z.object({
     DISCORD_TOKEN: z.string().trim().min(1, 'is required'),
     DISCORD_CLIENT_ID: snowflakeSchema,
-    YOUTUBE_API_KEY: z.string().trim().min(1, 'is required'),
-    LAVALINK_URL: z.string().trim().url('must be a valid URL'),
-    LAVALINK_PASSWORD: z.string().trim().min(1, 'is required'),
     DEFAULT_VOLUME: z.preprocess(
-        (value) => (value === undefined || value === '' ? 50 : Number(value)),
+        (value) => (value === undefined || value === '' ? 10 : Number(value)),
         z.number().int().min(0).max(100),
     ),
     IDLE_DISCONNECT_SECONDS: z.preprocess(
@@ -20,22 +17,19 @@ const environmentSchema = z.object({
         (value) => (value === '' ? undefined : value),
         snowflakeSchema.optional(),
     ),
-    YOUTUBE_REGION: z.preprocess(
+    YT_DLP_PATH: z.preprocess(
         (value) => (value === '' ? undefined : value),
-        z.string().trim().length(2).toUpperCase().optional(),
+        z.string().trim().min(1).optional(),
     ),
 });
 
 export interface Environment {
     discordToken: string;
     discordClientId: string;
-    youtubeApiKey: string;
-    lavalinkUrl: string;
-    lavalinkPassword: string;
     defaultVolume: number;
     idleDisconnectMs: number;
     discordGuildId?: string;
-    youtubeRegion?: string;
+    ytDlpPath?: string;
 }
 
 export class ConfigurationError extends Error {
@@ -56,17 +50,12 @@ export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
     return {
         discordToken: result.data.DISCORD_TOKEN,
         discordClientId: result.data.DISCORD_CLIENT_ID,
-        youtubeApiKey: result.data.YOUTUBE_API_KEY,
-        lavalinkUrl: result.data.LAVALINK_URL,
-        lavalinkPassword: result.data.LAVALINK_PASSWORD,
         defaultVolume: result.data.DEFAULT_VOLUME,
         idleDisconnectMs: result.data.IDLE_DISCONNECT_SECONDS * 1_000,
         ...(result.data.DISCORD_GUILD_ID === undefined
             ? {}
             : { discordGuildId: result.data.DISCORD_GUILD_ID }),
-        ...(result.data.YOUTUBE_REGION === undefined
-            ? {}
-            : { youtubeRegion: result.data.YOUTUBE_REGION }),
+        ...(result.data.YT_DLP_PATH === undefined ? {} : { ytDlpPath: result.data.YT_DLP_PATH }),
     };
 }
 

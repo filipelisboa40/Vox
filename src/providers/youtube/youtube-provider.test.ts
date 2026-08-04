@@ -1,107 +1,56 @@
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
+
+import { describe, expect, it, vi } from 'vitest';
 
 import type { AudioProvider } from '../audio-provider.js';
-import {
-    MediaStreamError,
-    MediaUnavailableError,
-    NoMediaResultsError,
-} from '../provider-errors.js';
+import { MediaStreamError, MediaUnavailableError } from '../provider-errors.js';
 import {
     YouTubeProvider,
     extractYouTubeVideoId,
-    parseYouTubeDuration,
+    parseYtDlpMetadata,
+    type YtDlpMetadata,
+    type YtDlpProcess,
+    type YtDlpRunner,
 } from './youtube-provider.js';
 
 const videoId = 'abcdefghijk';
 
-interface VideoOverrides {
-    readonly id?: string;
-    readonly title?: string;
-    readonly duration?: string;
-    readonly liveBroadcastContent?: string;
-    readonly privacyStatus?: string;
-    readonly uploadStatus?: string;
-    readonly ageRestricted?: boolean;
-    readonly allowedRegions?: string[];
-    readonly blockedRegions?: string[];
-}
-
-function createVideo(overrides: VideoOverrides = {}) {
-    return {
-        id: overrides.id ?? videoId,
-        snippet: {
-            title: overrides.title ?? 'Example song',
-            liveBroadcastContent: overrides.liveBroadcastContent ?? 'none',
-            thumbnails: {
-                default: { url: 'https://i.ytimg.com/example.jpg' },
-                high: { url: 'https://i.ytimg.com/example-high.jpg' },
-            },
-        },
-        contentDetails: {
-            duration: overrides.duration ?? 'PT3M5S',
-            ...(overrides.ageRestricted === true
-                ? { contentRating: { ytRating: 'ytAgeRestricted' } }
-                : {}),
-            ...(overrides.allowedRegions === undefined && overrides.blockedRegions === undefined
-                ? {}
-                : {
-                      regionRestriction: {
-                          ...(overrides.allowedRegions === undefined
-                              ? {}
-                              : { allowed: overrides.allowedRegions }),
-                          ...(overrides.blockedRegions === undefined
-                              ? {}
-                              : { blocked: overrides.blockedRegions }),
-                      },
-                  }),
-        },
-        status: {
-            privacyStatus: overrides.privacyStatus ?? 'public',
-            uploadStatus: overrides.uploadStatus ?? 'processed',
-        },
-    };
-}
-
-function jsonResponse(payload: unknown, status = 200): Response {
-    return new Response(JSON.stringify(payload), {
-        status,
-        headers: { 'content-type': 'application/json' },
-    });
-}
-
-function createFetchFixture(responses: readonly Response[]): {
-    readonly fetchImplementation: typeof fetch;
-    readonly requestedUrls: URL[];
+function createProcess(audio = 'audio'): {
+    readonly process: YtDlpProcess;
+    readonly kill: ReturnType<typeof vi.fn>;
 } {
-    const remainingResponses = [...responses];
-    const requestedUrls: URL[] = [];
-    const fetchImplementation: typeof fetch = (input) => {
-        const url =
-            input instanceof URL
-                ? input
-                : typeof input === 'string'
-                  ? new URL(input)
-                  : new URL(input.url);
-        requestedUrls.push(url);
-        const response = remainingResponses.shift();
-
-        return response === undefined
-            ? Promise.reject(new Error('No fake response configured'))
-            : Promise.resolve(response);
-    };
-
-    return { fetchImplementation, requestedUrls };
+    const emitter = new EventEmitter();
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const kill = vi.fn(() => true);
+    const process = Object.assign(emitter, { stdout, stderr, kill }) as YtDlpProcess;
+    stdout.end(audio);
+    stderr.end();
+    return { process, kill };
 }
 
-function createProvider(
-    options: Partial<ConstructorParameters<typeof YouTubeProvider>[0]> &
-        Pick<ConstructorParameters<typeof YouTubeProvider>[0], 'apiKey'>,
-): YouTubeProvider {
-    return new YouTubeProvider({
-        lavalinkUrl: 'http://localhost:2333',
-        lavalinkPassword: 'lavalink-password',
-        ...options,
-    });
+function createRunner(metadata: YtDlpMetadata): {
+    readonly runner: YtDlpRunner;
+    readonly readMetadata: ReturnType<typeof vi.fn>;
+    readonly startAudio: ReturnType<typeof vi.fn>;
+    readonly mediaProcess: ReturnType<typeof createProcess>;
+} {
+    const mediaProcess = createProcess();
+    const readMetadata = vi.fn().mockResolvedValue(metadata);
+    const startAudio = vi.fn().mockResolvedValue(mediaProcess.process);
+    return { runner: { readMetadata, startAudio }, readMetadata, startAudio, mediaProcess };
+}
+
+function validMetadata(overrides: YtDlpMetadata = {}): YtDlpMetadata {
+    return {
+        id: videoId,
+        title: '  Example\n song  ',
+        webpage_url: `https://www.youtube.com/watch?v=${videoId}`,
+        duration: 185,
+        thumbnail: 'https://i.ytimg.com/example.jpg',
+        ...overrides,
+    };
 }
 
 describe('extractYouTubeVideoId', () => {
@@ -124,190 +73,102 @@ describe('extractYouTubeVideoId', () => {
     });
 });
 
-describe('parseYouTubeDuration', () => {
-    it.each([
-        ['PT3M5S', 185_000],
-        ['PT1H2M3.5S', 3_723_500],
-        ['P1DT2H', 93_600_000],
-    ])('parses %s', (duration, expectedMilliseconds) => {
-        expect(parseYouTubeDuration(duration)).toBe(expectedMilliseconds);
+describe('parseYtDlpMetadata', () => {
+    it('keeps metadata returned for a direct video URL', () => {
+        expect(parseYtDlpMetadata(JSON.stringify(validMetadata()))).toMatchObject({
+            id: videoId,
+            title: '  Example\n song  ',
+        });
     });
 
-    it('rejects malformed durations', () => {
-        expect(() => parseYouTubeDuration('not-a-duration')).toThrow(MediaUnavailableError);
+    it('unwraps the first result returned by ytsearch', () => {
+        expect(
+            parseYtDlpMetadata(
+                JSON.stringify({
+                    id: 'example song',
+                    title: 'example song',
+                    entries: [validMetadata()],
+                }),
+            ),
+        ).toMatchObject({ id: videoId });
+    });
+
+    it('returns empty metadata when a search has no entries', () => {
+        expect(parseYtDlpMetadata(JSON.stringify({ entries: [] }))).toEqual({});
     });
 });
 
-describe('YouTubeProvider', () => {
-    it('resolves a URL into normalized track metadata', async () => {
-        const fixture = createFetchFixture([
-            jsonResponse({ items: [createVideo({ title: '  Example\n song  ' })] }),
-        ]);
-        const provider = createProvider({
-            apiKey: 'secret-key',
-            fetchImplementation: fixture.fetchImplementation,
-        });
+describe('YouTubeProvider with yt-dlp', () => {
+    it('searches through ytsearch and maps normalized metadata', async () => {
+        const fixture = createRunner(validMetadata());
+        const provider = new YouTubeProvider({ runner: fixture.runner });
 
-        await expect(provider.resolveUrl(new URL(`https://youtu.be/${videoId}`))).resolves.toEqual({
+        await expect(provider.search('example song')).resolves.toEqual({
             provider: 'youtube',
             providerTrackId: videoId,
             title: 'Example song',
             url: `https://www.youtube.com/watch?v=${videoId}`,
             durationMs: 185_000,
-            thumbnailUrl: 'https://i.ytimg.com/example-high.jpg',
+            thumbnailUrl: 'https://i.ytimg.com/example.jpg',
         });
-        expect(fixture.requestedUrls[0]?.searchParams.get('key')).toBe('secret-key');
+        expect(fixture.readMetadata).toHaveBeenCalledWith('ytsearch1:example song');
     });
 
-    it('searches and selects the first valid video result', async () => {
-        const validId = 'lmnopqrstuv';
-        const fixture = createFetchFixture([
-            jsonResponse({ items: [{ id: { videoId } }, { id: { videoId: validId } }] }),
-            jsonResponse({
-                items: [
-                    createVideo({ liveBroadcastContent: 'live' }),
-                    createVideo({ id: validId, title: 'Wanted song' }),
-                ],
-            }),
-        ]);
-        const provider = createProvider({
-            apiKey: 'key',
-            region: 'PT',
-            fetchImplementation: fixture.fetchImplementation,
+    it('resolves supported YouTube URLs through yt-dlp', async () => {
+        const fixture = createRunner(validMetadata());
+        const provider = new YouTubeProvider({ runner: fixture.runner });
+        const url = new URL(`https://youtu.be/${videoId}`);
+
+        await expect(provider.resolveUrl(url)).resolves.toMatchObject({
+            providerTrackId: videoId,
         });
-
-        await expect(provider.search('wanted')).resolves.toMatchObject({
-            providerTrackId: validId,
-            title: 'Wanted song',
-        });
-        expect(fixture.requestedUrls[0]?.searchParams.get('q')).toBe('wanted');
-        expect(fixture.requestedUrls[0]?.searchParams.get('regionCode')).toBe('PT');
-    });
-
-    it('rejects private or missing videos', async () => {
-        const privateFixture = createFetchFixture([
-            jsonResponse({ items: [createVideo({ privacyStatus: 'private' })] }),
-        ]);
-        const missingFixture = createFetchFixture([jsonResponse({ items: [] })]);
-
-        await expect(
-            createProvider({
-                apiKey: 'key',
-                fetchImplementation: privateFixture.fetchImplementation,
-            }).resolveUrl(new URL(`https://youtu.be/${videoId}`)),
-        ).rejects.toBeInstanceOf(MediaUnavailableError);
-        await expect(
-            createProvider({
-                apiKey: 'key',
-                fetchImplementation: missingFixture.fetchImplementation,
-            }).resolveUrl(new URL(`https://youtu.be/${videoId}`)),
-        ).rejects.toBeInstanceOf(MediaUnavailableError);
+        expect(fixture.readMetadata).toHaveBeenCalledWith(url.toString());
     });
 
     it.each([
-        createVideo({ liveBroadcastContent: 'live' }),
-        createVideo({ ageRestricted: true }),
-        createVideo({ blockedRegions: ['PT'] }),
-        createVideo({ allowedRegions: ['US'] }),
-        createVideo({ duration: 'PT13H' }),
-    ])('rejects restricted or unsupported video metadata', async (video) => {
-        const fixture = createFetchFixture([jsonResponse({ items: [video] })]);
-        const provider = createProvider({
-            apiKey: 'key',
-            region: 'PT',
-            fetchImplementation: fixture.fetchImplementation,
-        });
+        validMetadata({ is_live: true }),
+        validMetadata({ availability: 'private' }),
+        validMetadata({ age_limit: 18 }),
+        validMetadata({ duration: 13 * 60 * 60 }),
+        validMetadata({ id: 'invalid' }),
+    ])('rejects restricted or invalid metadata', async (metadata) => {
+        const fixture = createRunner(metadata);
+        const provider = new YouTubeProvider({ runner: fixture.runner });
 
         await expect(
             provider.resolveUrl(new URL(`https://youtu.be/${videoId}`)),
         ).rejects.toBeInstanceOf(MediaUnavailableError);
     });
 
-    it('returns no-results errors without making real API requests', async () => {
-        const fixture = createFetchFixture([jsonResponse({ items: [] })]);
-        const provider = createProvider({
-            apiKey: 'key',
-            fetchImplementation: fixture.fetchImplementation,
-        });
-
-        await expect(provider.search('missing')).rejects.toBeInstanceOf(NoMediaResultsError);
-    });
-
-    it('streams playable audio from the authenticated Lavalink endpoint', async () => {
-        let requestUrl: URL | undefined;
-        let authorization: string | null = null;
-        const provider = createProvider({
-            apiKey: 'key',
-            fetchImplementation: (input, init) => {
-                requestUrl = new URL(input instanceof Request ? input.url : input.toString());
-                authorization = new Headers(init?.headers).get('authorization');
-                return Promise.resolve(
-                    new Response('audio bytes', {
-                        headers: { 'content-type': 'audio/webm' },
-                    }),
-                );
-            },
-        });
-        const audioProvider: AudioProvider = provider;
+    it('streams yt-dlp stdout and terminates the process during disposal', async () => {
+        const fixture = createRunner(validMetadata());
+        const provider: AudioProvider = new YouTubeProvider({ runner: fixture.runner });
         const track = {
             provider: 'youtube',
             providerTrackId: videoId,
             title: 'Song',
             url: `https://www.youtube.com/watch?v=${videoId}`,
-            durationMs: 1000,
+            durationMs: 1_000,
         };
 
-        const source = await audioProvider.createPlayableSource(track);
-
-        expect(requestUrl?.href).toBe(`http://localhost:2333/youtube/stream/${videoId}`);
-        expect(authorization).toBe('lavalink-password');
-        expect(source.format).toBe('webm-opus');
+        const source = await provider.createPlayableSource(track, { startPositionMs: 30_000 });
         source.stream.setEncoding('utf8');
-        let streamedAudio = '';
+        let audio = '';
+        for await (const chunk of source.stream) audio += String(chunk);
 
-        for await (const chunk of source.stream) {
-            streamedAudio += String(chunk);
-        }
-
-        expect(streamedAudio).toBe('audio bytes');
+        expect(audio).toBe('audio');
+        expect(source.format).toBe('unknown');
+        expect(fixture.startAudio).toHaveBeenCalledWith(track.url, 30_000);
         await source.dispose?.();
+        expect(fixture.mediaProcess.kill).toHaveBeenCalledWith('SIGKILL');
     });
 
-    it('wraps Lavalink connection and response failures as media stream errors', async () => {
-        const unreachableProvider = createProvider({
-            apiKey: 'key',
-            fetchImplementation: () => Promise.reject(new Error('connection refused')),
-        });
-        const rejectedProvider = createProvider({
-            apiKey: 'key',
-            fetchImplementation: () => Promise.resolve(new Response(null, { status: 401 })),
-        });
-        const track = {
-            provider: 'youtube',
-            providerTrackId: videoId,
-            title: 'Song',
-            url: `https://www.youtube.com/watch?v=${videoId}`,
-            durationMs: 1000,
+    it('wraps yt-dlp startup failures as media stream errors', async () => {
+        const runner: YtDlpRunner = {
+            readMetadata: vi.fn().mockResolvedValue(validMetadata()),
+            startAudio: vi.fn().mockRejectedValue(new Error('yt-dlp missing')),
         };
-
-        await expect(unreachableProvider.createPlayableSource(track)).rejects.toBeInstanceOf(
-            MediaStreamError,
-        );
-        await expect(rejectedProvider.createPlayableSource(track)).rejects.toBeInstanceOf(
-            MediaStreamError,
-        );
-    });
-
-    it('rejects oversized Lavalink responses before buffering them', async () => {
-        const provider = createProvider({
-            apiKey: 'key',
-            fetchImplementation: () =>
-                Promise.resolve(
-                    new Response('audio', {
-                        headers: { 'content-length': String(257 * 1024 * 1024) },
-                    }),
-                ),
-        });
+        const provider = new YouTubeProvider({ runner });
 
         await expect(
             provider.createPlayableSource({
@@ -315,7 +176,7 @@ describe('YouTubeProvider', () => {
                 providerTrackId: videoId,
                 title: 'Song',
                 url: `https://www.youtube.com/watch?v=${videoId}`,
-                durationMs: 1000,
+                durationMs: 1_000,
             }),
         ).rejects.toBeInstanceOf(MediaStreamError);
     });

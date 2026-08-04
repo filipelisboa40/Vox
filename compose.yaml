@@ -1,0 +1,25 @@
+name: vox
+
+services:
+    bot:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            args:
+                YT_DLP_VERSION: 2026.07.04
+        image: vox-bot:local
+        restart: unless-stopped
+        init: false
+        env_file:
+            - .env
+        environment:
+            NODE_ENV: production
+            YT_DLP_PATH: /usr/local/bin/yt-dlp
+        read_only: true
+        tmpfs:
+            - /tmp:size=64m,mode=1777
+        cap_drop:
+            - ALL
+        security_opt:
+            - no-new-privileges:true
+        stop_grace_period: 20s

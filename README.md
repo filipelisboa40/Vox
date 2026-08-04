@@ -1,8 +1,8 @@
 # Vox
 
-Vox is a Discord music bot written in TypeScript. It searches YouTube through the YouTube Data
-API, obtains playable audio from a local Lavalink server, and keeps an independent queue for each
-Discord server.
+Vox is a Discord music bot written in TypeScript. It uses `yt-dlp` for YouTube search, metadata,
+and audio retrieval, then FFmpeg prepares that audio for Discord. Each Discord server has an
+independent queue.
 
 ## Content and YouTube terms
 
@@ -16,13 +16,9 @@ or otherwise unauthorized content.
 
 - Node.js 24 or newer
 - pnpm 11
-- Java 17 or newer for Lavalink 4
 - A Discord application and bot token
-- A YouTube Data API v3 key
-- Lavalink 4.2.2 with the `youtube-source` plugin
-
-The project includes `ffmpeg-static`, so a separate FFmpeg installation is normally unnecessary.
-Lavalink and its YouTube plugin must still be running before Vox can play audio.
+- FFmpeg available on `PATH`
+- `yt-dlp` available on `PATH`
 
 ## 1. Create the Discord application
 
@@ -45,24 +41,19 @@ The invitation requests `View Channel`, `Connect`, and `Speak`, plus the `applic
 scope. Select a server where you have permission to manage integrations. Channel-specific denies
 can still prevent Vox from joining or speaking.
 
-## 2. Configure YouTube and Lavalink
+## 2. Install FFmpeg and yt-dlp
 
-Create a Google Cloud project, enable **YouTube Data API v3**, and create an API key. Restrict the
-key to that API and to the environment where practical.
-
-Download Lavalink 4.2.2 and place `Lavalink.jar` beside
-[`lavalink/application.yml`](./lavalink/application.yml). The repository also expects the
-`youtube-source` plugin JAR under `lavalink/plugins/`. Ensure the password in
-`lavalink/application.yml` matches `LAVALINK_PASSWORD` in `.env`.
-
-Start Lavalink from the `lavalink` directory:
+Install current releases of [FFmpeg](https://ffmpeg.org/download.html) and
+[yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Installation), then restart the terminal and verify:
 
 ```shell
-java -jar Lavalink.jar
+ffmpeg -version
+yt-dlp --version
 ```
 
-Wait for `Lavalink is ready to accept connections`. If Java reports class-file version 61, an old
-Java 8 runtime is being used; install Java 17 or newer and confirm with `java -version`.
+On Windows, `winget install yt-dlp.yt-dlp` installs `yt-dlp`. Install FFmpeg with your preferred
+package manager and ensure both executable directories are on `PATH`. If `yt-dlp` is stored in a
+custom location, set `YT_DLP_PATH` to the full executable path.
 
 ## 3. Install and configure Vox
 
@@ -79,13 +70,10 @@ On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if needed. Neve
 | ------------------------- | -------- | --------------------------------------------------------------- |
 | `DISCORD_TOKEN`           | Yes      | Secret bot token from the Discord Developer Portal              |
 | `DISCORD_CLIENT_ID`       | Yes      | Discord application ID                                          |
-| `YOUTUBE_API_KEY`         | Yes      | YouTube Data API v3 key                                         |
-| `LAVALINK_URL`            | Yes      | Lavalink base URL, normally `http://localhost:2333`             |
-| `LAVALINK_PASSWORD`       | Yes      | Password configured in Lavalink                                 |
-| `DEFAULT_VOLUME`          | No       | Initial server volume from `0` to `100`; defaults to `50`       |
+| `YT_DLP_PATH`             | No       | Full yt-dlp path; defaults to resolving `yt-dlp` from `PATH`    |
+| `DEFAULT_VOLUME`          | No       | Initial server volume from `0` to `100`; defaults to `10`       |
 | `IDLE_DISCONNECT_SECONDS` | No       | Idle time before disconnecting; defaults to `300`; `0` disables |
 | `DISCORD_GUILD_ID`        | No       | Development server ID for fast guild command deployment         |
-| `YOUTUBE_REGION`          | No       | Two-letter region used for YouTube search and availability      |
 | `LOG_LEVEL`               | No       | Pino level such as `debug`, `info`, `warn`, or `error`          |
 
 ## 4. Deploy commands and run
@@ -163,19 +151,11 @@ only tracks manual skips and cannot always restore a source that has become unav
 
 ### Tracks are unavailable or stop immediately
 
-- Confirm Lavalink says it is ready on port `2333` and its password matches `.env`.
-- Confirm the YouTube plugin loaded and the configured plugin JAR is compatible with Lavalink.
-- Check that the video is public, available in `YOUTUBE_REGION`, and authorized for your use.
-- Verify the YouTube API key is enabled, valid, and has remaining quota.
-- If FFmpeg is reported missing, reinstall dependencies so `ffmpeg-static` is present.
-
-### Lavalink or Java fails to start
-
-- `Unable to access jarfile Lavalink.jar` means the JAR is missing or the terminal is in the wrong
-  directory.
-- Class-file version `61.0` requires Java 17; Java 8 only supports class-file version `52.0`.
-- A connection reset after the bot stops a stream can be harmless; inspect the Vox log immediately
-  before it for the actual playback error.
+- Run `yt-dlp --version` and `ffmpeg -version` in the same environment that starts Vox.
+- Update `yt-dlp`; YouTube changes frequently and old versions can stop working.
+- Check that the video is public, available in your region, and authorized for your use.
+- Run `yt-dlp -f bestaudio/best -o - VIDEO_URL` manually to inspect extractor errors.
+- If seeking fails, confirm FFmpeg is on `PATH`; `yt-dlp --download-sections` requires FFmpeg.
 
 ## Development checks
 
@@ -192,4 +172,34 @@ pnpm format:check
 
 Commands are registered explicitly in [`src/commands/index.ts`](./src/commands/index.ts), playback
 state is isolated per guild, and media/provider errors are converted to safe user-facing messages.
-Docker packaging is intentionally handled in the final Docker milestone.
+
+## Docker deployment
+
+The production image contains Node.js 24, FFmpeg, and a checksum-verified official `yt-dlp`
+executable. It builds TypeScript separately, installs production dependencies from the lockfile,
+runs as the non-root `node` user, and uses `dumb-init` for graceful `SIGTERM` handling.
+
+Build and start the bot:
+
+```shell
+docker compose build
+docker compose up -d
+docker compose logs --follow
+```
+
+Confirm all three runtime tools and the non-root identity:
+
+```shell
+docker compose exec bot node --version
+docker compose exec bot ffmpeg -version
+docker compose exec bot yt-dlp --version
+docker compose exec bot id
+```
+
+Rebuild after source or dependency changes, then stop gracefully:
+
+```shell
+docker compose build --pull
+docker compose up -d --remove-orphans
+docker compose down
+```

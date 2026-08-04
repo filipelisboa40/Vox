@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.pnpm-store
+coverage
+dist
+node_modules
+*.log
+Dockerfile*
+compose*.yaml
+src/**/*.test.ts
+.github
+.idea
+.vscode
