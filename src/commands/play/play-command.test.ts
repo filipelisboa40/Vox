@@ -2,6 +2,7 @@ import type { DiscordGatewayAdapterCreator } from '@discordjs/voice';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
+import { recordCommandResponse } from '../../models/test-fixtures.js';
 import type { GuildPlayer } from '../../player/guild-player.js';
 import { VoiceAccessError, type VoiceJoinTarget } from '../../player/voice-access.js';
 import type { ProviderTrack } from '../../providers/audio-provider.js';
@@ -27,11 +28,12 @@ function createInteraction(query = 'example song'): {
     readonly interaction: ChatInputCommandInteraction;
     readonly editReply: ReturnType<typeof vi.fn>;
 } {
-    const editReply = vi.fn().mockResolvedValue(undefined);
+    const editReply = vi.fn();
+    const interactionEditReply = vi.fn(recordCommandResponse(editReply));
     const interaction = {
         options: { getString: vi.fn().mockReturnValue(query) },
         user: { id: 'user-id', username: 'Requester', globalName: null },
-        editReply,
+        editReply: interactionEditReply,
     } as unknown as ChatInputCommandInteraction;
     return { interaction, editReply };
 }

@@ -2,6 +2,7 @@ import type { DiscordGatewayAdapterCreator } from '@discordjs/voice';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
+import { recordCommandResponse } from '../../models/test-fixtures.js';
 import type { GuildPlayer } from '../../player/guild-player.js';
 import type { VoiceJoinTarget } from '../../player/voice-access.js';
 import { createVolumeCommand, volumeCommandData } from './volume-command.js';
@@ -13,11 +14,12 @@ const voiceTarget: VoiceJoinTarget = {
 };
 
 function createInteraction(level: number) {
-    const reply = vi.fn().mockResolvedValue(undefined);
+    const reply = vi.fn();
+    const interactionReply = vi.fn(recordCommandResponse(reply));
     return {
         interaction: {
             options: { getInteger: () => level },
-            reply,
+            reply: interactionReply,
         } as unknown as ChatInputCommandInteraction,
         reply,
     };

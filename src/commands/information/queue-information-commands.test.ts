@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { LoopMode } from '../../models/playback-state.js';
 import { QueueManager } from '../../models/queue-manager.js';
-import { createTrack } from '../../models/test-fixtures.js';
+import { createTrack, recordCommandResponse } from '../../models/test-fixtures.js';
 import type { Track } from '../../models/track.js';
 import type { GuildPlayer } from '../../player/guild-player.js';
 import type { PlaybackController } from '../../player/playback-controller.js';
@@ -17,12 +17,13 @@ import {
 } from './queue-information-commands.js';
 
 function createInteraction(page: number | null = null) {
-    const reply = vi.fn().mockResolvedValue(undefined);
+    const reply = vi.fn();
+    const interactionReply = vi.fn(recordCommandResponse(reply));
     return {
         interaction: {
             guildId: 'guild-id',
             options: { getInteger: () => page },
-            reply,
+            reply: interactionReply,
         } as unknown as ChatInputCommandInteraction,
         reply,
     };

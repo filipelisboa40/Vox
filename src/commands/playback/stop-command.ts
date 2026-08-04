@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { VoiceAccessError } from '../../player/voice-access.js';
+import { errorResponse, successResponse } from '../../utilities/command-response.js';
 import type { Command } from '../command.js';
 import {
     PlaybackControlError,
@@ -20,14 +21,18 @@ export function createStopCommand(dependencies: PlaybackResolverDependencies): C
                 const playback = await resolvePlayback(interaction, dependencies);
 
                 if (!(await playback.stop())) {
-                    await interaction.reply('Nothing is currently playing in this server');
+                    await interaction.reply(
+                        errorResponse('Nothing is currently playing in this server'),
+                    );
                     return;
                 }
 
-                await interaction.reply('Playback stopped and the queue was cleared');
+                await interaction.reply(
+                    successResponse('Playback stopped and the queue was cleared'),
+                );
             } catch (error: unknown) {
                 if (error instanceof PlaybackControlError || error instanceof VoiceAccessError) {
-                    await interaction.reply(error.message);
+                    await interaction.reply(errorResponse(error.message));
                     return;
                 }
 

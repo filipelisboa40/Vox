@@ -2,6 +2,7 @@ import { SlashCommandBuilder } from 'discord.js';
 
 import { VoiceAccessError } from '../../player/voice-access.js';
 import type { Command } from '../command.js';
+import { errorResponse, successResponse } from '../../utilities/command-response.js';
 import {
     PlaybackControlError,
     resolvePlayback,
@@ -24,14 +25,18 @@ export function createSkipCommand(dependencies: PlaybackResolverDependencies): C
                 const result = await (await resolvePlayback(interaction, dependencies)).skip();
 
                 if (result.status === 'nothing-playing') {
-                    await interaction.reply('Nothing is currently playing in this server');
+                    await interaction.reply(
+                        errorResponse('Nothing is currently playing in this server'),
+                    );
                     return;
                 }
 
                 await interaction.reply(
-                    result.next === undefined
-                        ? `Skipped **${result.skipped.title}**; the queue is now empty`
-                        : `Skipped **${result.skipped.title}**; now playing **${result.next.title}**`,
+                    successResponse(
+                        result.next === undefined
+                            ? `Skipped **${result.skipped.title}**; the queue is now empty`
+                            : `Skipped **${result.skipped.title}**; now playing **${result.next.title}**`,
+                    ),
                 );
             } catch (error: unknown) {
                 await replyWithPlaybackError(interaction, error);
@@ -48,16 +53,18 @@ export function createUnskipCommand(dependencies: PlaybackResolverDependencies):
                 const result = await (await resolvePlayback(interaction, dependencies)).unskip();
 
                 if (result.status === 'nothing-to-unskip') {
-                    await interaction.reply('There is no skipped track to restore');
+                    await interaction.reply(errorResponse('There is no skipped track to restore'));
                     return;
                 }
 
                 if (result.status === 'failed') {
-                    await interaction.reply('The skipped track could not be restored');
+                    await interaction.reply(
+                        errorResponse('The skipped track could not be restored'),
+                    );
                     return;
                 }
 
-                await interaction.reply(`Restored **${result.track.title}**`);
+                await interaction.reply(successResponse(`Restored **${result.track.title}**`));
             } catch (error: unknown) {
                 await replyWithPlaybackError(interaction, error);
             }
@@ -70,7 +77,7 @@ async function replyWithPlaybackError(
     error: unknown,
 ): Promise<void> {
     if (error instanceof PlaybackControlError || error instanceof VoiceAccessError) {
-        await interaction.reply(error.message);
+        await interaction.reply(errorResponse(error.message));
         return;
     }
 

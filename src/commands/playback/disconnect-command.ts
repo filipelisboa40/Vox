@@ -3,6 +3,7 @@ import { SlashCommandBuilder } from 'discord.js';
 import type { PlayerManager } from '../../player/player-manager.js';
 import { resolveVoiceJoinTarget, VoiceAccessError } from '../../player/voice-access.js';
 import type { Command } from '../command.js';
+import { errorResponse, successResponse } from '../../utilities/command-response.js';
 import { PlaybackControlError, type VoiceTargetResolver } from './resolve-playback.js';
 
 export const disconnectCommandData = new SlashCommandBuilder()
@@ -36,10 +37,12 @@ export function createDisconnectCommand(dependencies: DisconnectCommandDependenc
 
                 await dependencies.players.destroy(voiceTarget.guildId);
                 const botName = interaction.client.user?.username ?? 'The bot';
-                await interaction.reply(`${botName} disconnected from the voice channel`);
+                await interaction.reply(
+                    successResponse(`${botName} disconnected from the voice channel`),
+                );
             } catch (error: unknown) {
                 if (error instanceof PlaybackControlError || error instanceof VoiceAccessError) {
-                    await interaction.reply(error.message);
+                    await interaction.reply(errorResponse(error.message));
                     return;
                 }
 

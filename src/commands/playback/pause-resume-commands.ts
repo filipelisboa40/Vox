@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 
 import { VoiceAccessError } from '../../player/voice-access.js';
+import { errorResponse, successResponse } from '../../utilities/command-response.js';
 import type { Command } from '../command.js';
 import {
     PlaybackControlError,
@@ -24,14 +25,14 @@ export function createPauseCommand(dependencies: PlaybackResolverDependencies): 
                 const playback = await resolvePlayback(interaction, dependencies);
 
                 if (!playback.pause()) {
-                    await interaction.reply('Playback is not currently playing');
+                    await interaction.reply(errorResponse('Playback is not currently playing'));
                     return;
                 }
 
-                await interaction.reply('Playback paused');
+                await interaction.reply(successResponse('Playback paused'));
             } catch (error: unknown) {
                 if (error instanceof PlaybackControlError || error instanceof VoiceAccessError) {
-                    await interaction.reply(error.message);
+                    await interaction.reply(errorResponse(error.message));
                     return;
                 }
 
@@ -49,14 +50,14 @@ export function createResumeCommand(dependencies: PlaybackResolverDependencies):
                 const playback = await resolvePlayback(interaction, dependencies);
 
                 if (!playback.resume()) {
-                    await interaction.reply('Playback is not paused');
+                    await interaction.reply(errorResponse('Playback is not paused'));
                     return;
                 }
 
-                await interaction.reply('Playback resumed');
+                await interaction.reply(successResponse('Playback resumed'));
             } catch (error: unknown) {
                 if (error instanceof PlaybackControlError || error instanceof VoiceAccessError) {
-                    await interaction.reply(error.message);
+                    await interaction.reply(errorResponse(error.message));
                     return;
                 }
 

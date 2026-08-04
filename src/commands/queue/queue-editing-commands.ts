@@ -2,6 +2,11 @@ import { SlashCommandBuilder } from 'discord.js';
 
 import { VoiceAccessError } from '../../player/voice-access.js';
 import { formatTrackTitle } from '../../utilities/playback-format.js';
+import {
+    errorResponse,
+    informationResponse,
+    successResponse,
+} from '../../utilities/command-response.js';
 import type { Command } from '../command.js';
 import {
     PlaybackControlError,
@@ -50,9 +55,11 @@ export function createClearCommand(dependencies: PlaybackResolverDependencies): 
         async (interaction, playback) => {
             const removed = playback.queue.clearWaiting();
             await interaction.reply(
-                removed.length === 0
-                    ? 'The queue is already empty'
-                    : `Removed ${removed.length} ${removed.length === 1 ? 'track' : 'tracks'} from the queue`,
+                (removed.length === 0 ? informationResponse : successResponse)(
+                    removed.length === 0
+                        ? 'The queue is already empty'
+                        : `Removed ${removed.length} ${removed.length === 1 ? 'track' : 'tracks'} from the queue`,
+                ),
             );
         },
     );
@@ -68,14 +75,18 @@ export function createRemoveCommand(dependencies: PlaybackResolverDependencies):
 
             switch (result.status) {
                 case 'empty':
-                    await interaction.reply('The queue is empty');
+                    await interaction.reply(errorResponse('The queue is empty'));
                     return;
                 case 'out-of-range':
-                    await interaction.reply(`Queue position ${position} does not exist`);
+                    await interaction.reply(
+                        errorResponse(`Queue position ${position} does not exist`),
+                    );
                     return;
                 case 'removed':
                     await interaction.reply(
-                        `Removed **${formatTrackTitle(result.track)}** from queue position ${position}`,
+                        successResponse(
+                            `Removed **${formatTrackTitle(result.track)}** from queue position ${position}`,
+                        ),
                     );
             }
         },
@@ -93,19 +104,25 @@ export function createMoveCommand(dependencies: PlaybackResolverDependencies): C
 
             switch (result.status) {
                 case 'empty':
-                    await interaction.reply('The queue is empty');
+                    await interaction.reply(errorResponse('The queue is empty'));
                     return;
                 case 'out-of-range':
-                    await interaction.reply('One or both queue positions do not exist');
+                    await interaction.reply(
+                        errorResponse('One or both queue positions do not exist'),
+                    );
                     return;
                 case 'unchanged':
                     await interaction.reply(
-                        `**${formatTrackTitle(result.track)}** is already at ${from}`,
+                        informationResponse(
+                            `**${formatTrackTitle(result.track)}** is already at ${from}`,
+                        ),
                     );
                     return;
                 case 'moved':
                     await interaction.reply(
-                        `Moved **${formatTrackTitle(result.track)}** from position ${from} to ${to}`,
+                        successResponse(
+                            `Moved **${formatTrackTitle(result.track)}** from position ${from} to ${to}`,
+                        ),
                     );
             }
         },
@@ -118,11 +135,15 @@ export function createShuffleCommand(dependencies: PlaybackResolverDependencies)
         dependencies,
         async (interaction, playback) => {
             if (!playback.queue.shuffle()) {
-                await interaction.reply('At least two queued tracks are required to shuffle');
+                await interaction.reply(
+                    errorResponse('At least two queued tracks are required to shuffle'),
+                );
                 return;
             }
 
-            await interaction.reply(`Shuffled ${playback.queue.size} queued tracks`);
+            await interaction.reply(
+                successResponse(`Shuffled ${playback.queue.size} queued tracks`),
+            );
         },
     );
 }
@@ -142,7 +163,7 @@ function createQueueEditingCommand(
                 await execute(interaction, await resolvePlayback(interaction, dependencies));
             } catch (error: unknown) {
                 if (error instanceof PlaybackControlError || error instanceof VoiceAccessError) {
-                    await interaction.reply(error.message);
+                    await interaction.reply(errorResponse(error.message));
                     return;
                 }
 

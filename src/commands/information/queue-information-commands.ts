@@ -11,6 +11,11 @@ import {
     sumKnownDurations,
 } from '../../utilities/playback-format.js';
 import type { Command } from '../command.js';
+import {
+    errorResponse,
+    informationResponse,
+    ResponseKind,
+} from '../../utilities/command-response.js';
 
 const tracksPerPage = 10;
 
@@ -39,12 +44,15 @@ export function createNowPlayingCommand(dependencies: QueueInformationDependenci
             const track = playback?.currentTrack;
 
             if (playback === undefined || track === undefined) {
-                await interaction.reply('Nothing is currently playing in this server');
+                await interaction.reply(
+                    errorResponse('Nothing is currently playing in this server'),
+                );
                 return;
             }
 
             const positionMs = playback.playbackPositionMs;
             const embed = new EmbedBuilder()
+                .setColor(ResponseKind.Information)
                 .setTitle('Now playing')
                 .setDescription(`**${formatTrackTitle(track, 256)}**\n<${track.url}>`)
                 .addFields(
@@ -75,12 +83,14 @@ export function createNextCommand(dependencies: QueueInformationDependencies): C
             const next = playback?.queue.peek();
 
             if (playback === undefined || next === undefined) {
-                await interaction.reply('The queue is empty');
+                await interaction.reply(errorResponse('The queue is empty'));
                 return;
             }
 
             await interaction.reply(
-                `Next: **${formatTrackTitle(next)}** (<${next.url}>) • ${formatDuration(next.durationMs)} • starts in ${formatDuration(estimateCurrentRemaining(playback))}`,
+                informationResponse(
+                    `Next: **${formatTrackTitle(next)}** (<${next.url}>) • ${formatDuration(next.durationMs)} • starts in ${formatDuration(estimateCurrentRemaining(playback))}`,
+                ),
             );
         },
     };
@@ -94,7 +104,7 @@ export function createQueueCommand(dependencies: QueueInformationDependencies): 
             const tracks = playback?.queue.snapshot() ?? [];
 
             if (playback === undefined || tracks.length === 0) {
-                await interaction.reply('The queue is empty');
+                await interaction.reply(errorResponse('The queue is empty'));
                 return;
             }
 
@@ -102,7 +112,7 @@ export function createQueueCommand(dependencies: QueueInformationDependencies): 
             const pageCount = Math.ceil(tracks.length / tracksPerPage);
 
             if (page > pageCount) {
-                await interaction.reply(`Queue page ${page} does not exist`);
+                await interaction.reply(errorResponse(`Queue page ${page} does not exist`));
                 return;
             }
 
@@ -115,6 +125,7 @@ export function createQueueCommand(dependencies: QueueInformationDependencies): 
                 estimateCurrentRemaining(playback),
             );
             const embed = new EmbedBuilder()
+                .setColor(ResponseKind.Information)
                 .setTitle('Queue')
                 .setDescription(lines.join('\n'))
                 .setFooter({

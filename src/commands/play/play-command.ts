@@ -17,6 +17,11 @@ import { MediaProviderError } from '../../providers/provider-errors.js';
 import { escapeDiscordFormatting } from '../../utilities/external-text.js';
 import { formatDuration } from '../../utilities/playback-format.js';
 import {
+    errorResponse,
+    informationResponse,
+    successResponse,
+} from '../../utilities/command-response.js';
+import {
     MediaLookupLimiter,
     MediaLookupRateLimitError,
 } from '../../utilities/media-lookup-limiter.js';
@@ -68,7 +73,14 @@ export function createPlayCommand(dependencies: PlayCommandDependencies): Comman
 
                 const track = toRequestedTrack(providerTrack, interaction);
                 const result = await guildPlayer.playback.enqueue(track);
-                await interaction.editReply(formatPlayResponse(track, result));
+                const message = formatPlayResponse(track, result);
+                await interaction.editReply(
+                    result.status === 'started'
+                        ? successResponse(message)
+                        : result.status === 'queued'
+                          ? informationResponse(message)
+                          : errorResponse(message),
+                );
             } catch (error: unknown) {
                 if (
                     error instanceof MediaProviderError ||
@@ -77,7 +89,7 @@ export function createPlayCommand(dependencies: PlayCommandDependencies): Comman
                     error instanceof MediaLookupRateLimitError ||
                     error instanceof PlayerVoiceChannelMismatchError
                 ) {
-                    await interaction.editReply(error.message);
+                    await interaction.editReply(errorResponse(error.message));
                     return;
                 }
 

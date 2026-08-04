@@ -3,6 +3,7 @@ import { SlashCommandBuilder } from 'discord.js';
 import { VoiceAccessError } from '../../player/voice-access.js';
 import { formatDuration } from '../../utilities/playback-format.js';
 import { InvalidSeekPositionError, parseSeekPosition } from '../../utilities/seek-position.js';
+import { errorResponse, successResponse } from '../../utilities/command-response.js';
 import type { Command } from '../command.js';
 import {
     PlaybackControlError,
@@ -82,7 +83,7 @@ function createSeekCommand(
                     error instanceof VoiceAccessError ||
                     error instanceof InvalidSeekPositionError
                 ) {
-                    await interaction.reply(error.message);
+                    await interaction.reply(errorResponse(error.message));
                     return;
                 }
 
@@ -99,18 +100,24 @@ async function replyForSeekResult(
 ): Promise<void> {
     switch (result.status) {
         case 'seeked':
-            await interaction.reply(successMessage);
+            await interaction.reply(successResponse(successMessage));
             return;
         case 'nothing-playing':
-            await interaction.reply('Nothing is currently playing in this server');
+            await interaction.reply(errorResponse('Nothing is currently playing in this server'));
             return;
         case 'unsupported':
-            await interaction.reply('The current provider does not support seeking this track');
+            await interaction.reply(
+                errorResponse('The current provider does not support seeking this track'),
+            );
             return;
         case 'out-of-range':
-            await interaction.reply('The requested position is outside the current track');
+            await interaction.reply(
+                errorResponse('The requested position is outside the current track'),
+            );
             return;
         case 'failed':
-            await interaction.reply('Playback could not be moved to the requested position');
+            await interaction.reply(
+                errorResponse('Playback could not be moved to the requested position'),
+            );
     }
 }

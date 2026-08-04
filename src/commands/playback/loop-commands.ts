@@ -2,6 +2,7 @@ import { SlashCommandBuilder } from 'discord.js';
 
 import { LoopMode } from '../../models/playback-state.js';
 import { VoiceAccessError } from '../../player/voice-access.js';
+import { errorResponse, successResponse } from '../../utilities/command-response.js';
 import type { Command } from '../command.js';
 import {
     PlaybackControlError,
@@ -38,11 +39,13 @@ function createLoopToggleCommand(
                     mode === 'track' ? playback.toggleTrackLoop() : playback.toggleQueueLoop();
                 const enabled = result !== LoopMode.Off;
                 await interaction.reply(
-                    `${mode === 'track' ? 'Track' : 'Queue'} loop ${enabled ? 'enabled' : 'disabled'}`,
+                    successResponse(
+                        `${mode === 'track' ? 'Track' : 'Queue'} loop ${enabled ? 'enabled' : 'disabled'}`,
+                    ),
                 );
             } catch (error: unknown) {
                 if (error instanceof PlaybackControlError || error instanceof VoiceAccessError) {
-                    await interaction.reply(error.message);
+                    await interaction.reply(errorResponse(error.message));
                     return;
                 }
 

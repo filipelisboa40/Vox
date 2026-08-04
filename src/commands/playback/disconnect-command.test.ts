@@ -2,6 +2,7 @@ import type { DiscordGatewayAdapterCreator } from '@discordjs/voice';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
+import { recordCommandResponse } from '../../models/test-fixtures.js';
 import type { GuildPlayer } from '../../player/guild-player.js';
 import type { VoiceJoinTarget } from '../../player/voice-access.js';
 import { createDisconnectCommand, disconnectCommandData } from './disconnect-command.js';
@@ -16,10 +17,11 @@ function createInteraction(username = 'Vox'): {
     readonly interaction: ChatInputCommandInteraction;
     readonly reply: ReturnType<typeof vi.fn>;
 } {
-    const reply = vi.fn().mockResolvedValue(undefined);
+    const reply = vi.fn();
+    const interactionReply = vi.fn(recordCommandResponse(reply));
     return {
         interaction: {
-            reply,
+            reply: interactionReply,
             client: { user: { username } },
         } as unknown as ChatInputCommandInteraction,
         reply,

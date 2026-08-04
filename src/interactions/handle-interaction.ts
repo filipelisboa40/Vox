@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 
 import type { CommandRegistry } from '../commands/command-registry.js';
 import type { KeyedOperationQueue } from '../utilities/keyed-operation-queue.js';
+import { errorResponse } from '../utilities/command-response.js';
 
 const genericErrorMessage = 'The command could not be completed. Please try again.';
 
@@ -57,14 +58,14 @@ async function sendErrorResponse(interaction: Interaction, content: string): Pro
     }
 
     if (interaction.deferred) {
-        await interaction.editReply({ content });
+        await interaction.editReply(errorResponse(content));
         return;
     }
 
     if (interaction.replied) {
-        await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+        await interaction.followUp({ ...errorResponse(content), flags: MessageFlags.Ephemeral });
         return;
     }
 
-    await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ ...errorResponse(content), flags: MessageFlags.Ephemeral });
 }

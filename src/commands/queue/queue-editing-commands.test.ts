@@ -3,7 +3,7 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import { QueueManager } from '../../models/queue-manager.js';
-import { createTrack } from '../../models/test-fixtures.js';
+import { createTrack, recordCommandResponse } from '../../models/test-fixtures.js';
 import type { GuildPlayer } from '../../player/guild-player.js';
 import type { PlaybackController } from '../../player/playback-controller.js';
 import type { VoiceJoinTarget } from '../../player/voice-access.js';
@@ -25,10 +25,11 @@ const voiceTarget: VoiceJoinTarget = {
 };
 
 function createInteraction(options: { position?: number; from?: number; to?: number } = {}) {
-    const reply = vi.fn().mockResolvedValue(undefined);
+    const reply = vi.fn();
+    const interactionReply = vi.fn(recordCommandResponse(reply));
     return {
         interaction: {
-            reply,
+            reply: interactionReply,
             options: {
                 getInteger: (name: string) => options[name as keyof typeof options],
             },
