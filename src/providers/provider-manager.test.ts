@@ -6,6 +6,7 @@ import {
     MediaUnavailableError,
     NoMediaResultsError,
     ProviderOperationError,
+    ProviderTimeoutError,
     UnsupportedMediaUrlError,
 } from './provider-errors.js';
 import { ProviderManager } from './provider-manager.js';
@@ -72,6 +73,19 @@ describe('ProviderManager', () => {
         const manager = new ProviderManager([brokenProvider]);
 
         await expect(manager.resolve('song')).rejects.toBeInstanceOf(ProviderOperationError);
+    });
+
+    it('times out a provider that never resolves', async () => {
+        const slowProvider: AudioProvider = {
+            name: 'slow',
+            canHandleUrl: () => false,
+            search: () => new Promise<ProviderTrack>(() => undefined),
+            resolveUrl: () => new Promise<ProviderTrack>(() => undefined),
+            createPlayableSource: () => new Promise(() => undefined),
+        };
+        const manager = new ProviderManager([slowProvider], slowProvider, 1);
+
+        await expect(manager.resolve('song')).rejects.toBeInstanceOf(ProviderTimeoutError);
     });
 
     it('creates a source through the provider recorded on the track', async () => {

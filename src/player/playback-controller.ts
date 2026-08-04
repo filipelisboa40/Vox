@@ -62,6 +62,16 @@ export class PlaybackController {
         this.#loopMode = loopMode;
     }
 
+    public toggleTrackLoop(): LoopMode {
+        this.#loopMode = this.#loopMode === LoopMode.Track ? LoopMode.Off : LoopMode.Track;
+        return this.#loopMode;
+    }
+
+    public toggleQueueLoop(): LoopMode {
+        this.#loopMode = this.#loopMode === LoopMode.Queue ? LoopMode.Off : LoopMode.Queue;
+        return this.#loopMode;
+    }
+
     public pause(): boolean {
         return this.#audioResources.pause();
     }
@@ -175,6 +185,24 @@ export class PlaybackController {
         } finally {
             this.#isStarting = false;
         }
+    }
+
+    public async handleTrackFinished(track: Track): Promise<void> {
+        switch (this.#loopMode) {
+            case LoopMode.Track:
+                await this.#audioResources.play(track, { startPositionMs: 0 });
+                return;
+            case LoopMode.Queue:
+                this.queue.add(track);
+                await this.advance();
+                return;
+            case LoopMode.Off:
+                await this.advance();
+        }
+    }
+
+    public async handleTrackFailed(): Promise<void> {
+        await this.advance();
     }
 
     public async advance(): Promise<void> {

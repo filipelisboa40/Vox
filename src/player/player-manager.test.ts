@@ -117,4 +117,51 @@ describe('PlayerManager', () => {
         expect(fixture.destroyMocks.get('guild-one')).toHaveBeenCalledOnce();
         expect(fixture.destroyMocks.get('guild-two')).toHaveBeenCalledOnce();
     });
+
+    it('cleans up when Discord disconnects or moves the bot', async () => {
+        const fixture = createFactoryFixture();
+        const manager = createManager(fixture);
+        manager.getOrCreate(joinOptions('guild', 'expected-channel'));
+
+        await expect(
+            manager.handleBotVoiceStateUpdate({
+                guildId: 'guild',
+                userId: 'bot-id',
+                botUserId: 'bot-id',
+                voiceChannelId: null,
+            }),
+        ).resolves.toBe(true);
+
+        expect(fixture.destroyMocks.get('guild')).toHaveBeenCalledOnce();
+        expect(manager.size).toBe(0);
+
+        const replacement = manager.getOrCreate(joinOptions('guild', 'new-channel'));
+        expect(replacement).not.toBe(fixture.createdPlayers[0]);
+        expect(manager.get('guild')).toBe(replacement);
+    });
+
+    it('ignores unrelated members and the bot remaining in its expected channel', async () => {
+        const fixture = createFactoryFixture();
+        const manager = createManager(fixture);
+        manager.getOrCreate(joinOptions('guild', 'expected-channel'));
+
+        await expect(
+            manager.handleBotVoiceStateUpdate({
+                guildId: 'guild',
+                userId: 'member-id',
+                botUserId: 'bot-id',
+                voiceChannelId: null,
+            }),
+        ).resolves.toBe(false);
+        await expect(
+            manager.handleBotVoiceStateUpdate({
+                guildId: 'guild',
+                userId: 'bot-id',
+                botUserId: 'bot-id',
+                voiceChannelId: 'expected-channel',
+            }),
+        ).resolves.toBe(false);
+
+        expect(fixture.destroyMocks.get('guild')).not.toHaveBeenCalled();
+    });
 });

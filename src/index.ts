@@ -1,5 +1,7 @@
 import 'dotenv/config';
 
+import { Events } from 'discord.js';
+
 import { createDiscordClient } from './client/create-discord-client.js';
 import { registerShutdownHandlers } from './client/shutdown.js';
 import { createCommandRegistry } from './commands/index.js';
@@ -15,7 +17,12 @@ async function start(): Promise<void> {
     const providerManager = createProviderManager(environment);
     const playerManager = new PlayerManager(
         logger,
-        createManagedGuildPlayerFactory(logger, providerManager, environment.defaultVolume / 100),
+        createManagedGuildPlayerFactory(
+            logger,
+            providerManager,
+            environment.defaultVolume / 100,
+            environment.idleDisconnectMs,
+        ),
     );
     const commandRegistry = createCommandRegistry({
         players: playerManager,
@@ -23,6 +30,25 @@ async function start(): Promise<void> {
     });
 
     registerInteractionHandler(client, commandRegistry, logger);
+    client.on(Events.VoiceStateUpdate, (_oldState, newState) => {
+        const botUserId = client.user?.id;
+
+        if (botUserId !== undefined) {
+            void playerManager
+                .handleBotVoiceStateUpdate({
+                    guildId: newState.guild.id,
+                    userId: newState.id,
+                    botUserId,
+                    voiceChannelId: newState.channelId,
+                })
+                .catch((error: unknown) => {
+                    logger.error(
+                        { error, guildId: newState.guild.id },
+                        'External voice cleanup failed',
+                    );
+                });
+        }
+    });
     registerShutdownHandlers(client, logger, () => playerManager.destroyAll());
     await client.login(environment.discordToken);
 }

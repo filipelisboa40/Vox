@@ -25,6 +25,13 @@ import {
     resumeCommandData,
 } from './playback/pause-resume-commands.js';
 import { createStopCommand, stopCommandData } from './playback/stop-command.js';
+import { createDisconnectCommand, disconnectCommandData } from './playback/disconnect-command.js';
+import {
+    createLoopCommand,
+    createLoopQueueCommand,
+    loopCommandData,
+    loopQueueCommandData,
+} from './playback/loop-commands.js';
 import { createVolumeCommand, volumeCommandData } from './playback/volume-command.js';
 import {
     createAbsoluteSeekCommand,
@@ -62,6 +69,9 @@ export const commandDefinitions = [
     removeCommandData,
     moveCommandData,
     shuffleCommandData,
+    loopCommandData,
+    loopQueueCommandData,
+    disconnectCommandData,
 ] as const;
 
 export function createCommandRegistry(dependencies: {
@@ -86,5 +96,8 @@ export function createCommandRegistry(dependencies: {
         createRemoveCommand({ players: dependencies.players }),
         createMoveCommand({ players: dependencies.players }),
         createShuffleCommand({ players: dependencies.players }),
+        createLoopCommand({ players: dependencies.players }),
+        createLoopQueueCommand({ players: dependencies.players }),
+        createDisconnectCommand({ players: dependencies.players }),
     ]);
 }

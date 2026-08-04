@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Command } from '../commands/command.js';
 import { CommandRegistry } from '../commands/command-registry.js';
 import { handleInteraction } from './handle-interaction.js';
+import { KeyedOperationQueue } from '../utilities/keyed-operation-queue.js';
 
 interface InteractionFixture {
     interaction: Interaction;
@@ -18,7 +19,11 @@ interface InteractionFixture {
     deferReply: ReturnType<typeof vi.fn>;
 }
 
-function createInteraction(commandName: string, deferred = false): InteractionFixture {
+function createInteraction(
+    commandName: string,
+    deferred = false,
+    guildId: string | null = null,
+): InteractionFixture {
     const reply = vi.fn().mockResolvedValue(undefined);
     const editReply = vi.fn().mockResolvedValue(undefined);
     const followUp = vi.fn().mockResolvedValue(undefined);
@@ -29,6 +34,7 @@ function createInteraction(commandName: string, deferred = false): InteractionFi
         commandName,
         deferred,
         replied: false,
+        guildId,
         isChatInputCommand: () => true,
         isRepliable: () => true,
         reply,
@@ -80,6 +86,38 @@ describe('handleInteraction', () => {
         );
 
         expect(fixture.deferReply).toHaveBeenCalledOnce();
+    });
+
+    it('serializes simultaneous state-changing commands in one guild', async () => {
+        const first = createInteraction('test', false, 'guild-id');
+        const second = createInteraction('test', false, 'guild-id');
+        const { logger } = createLogger();
+        const events: string[] = [];
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const execute = vi
+            .fn()
+            .mockImplementationOnce(async () => {
+                events.push('play-start');
+                await gate;
+                events.push('play-end');
+            })
+            .mockImplementationOnce(() => {
+                events.push('skip');
+                return Promise.resolve();
+            });
+        const registry = new CommandRegistry([createCommand(execute)]);
+        const queue = new KeyedOperationQueue();
+
+        const play = handleInteraction(first.interaction, registry, logger, queue);
+        const skip = handleInteraction(second.interaction, registry, logger, queue);
+        await vi.waitFor(() => expect(events).toEqual(['play-start']));
+        release();
+        await Promise.all([play, skip]);
+
+        expect(events).toEqual(['play-start', 'play-end', 'skip']);
     });
 
     it('replies safely when a command fails before responding', async () => {

@@ -19,7 +19,20 @@ describe('parseEnvironment', () => {
             lavalinkUrl: validInput.LAVALINK_URL,
             lavalinkPassword: validInput.LAVALINK_PASSWORD,
             defaultVolume: 50,
+            idleDisconnectMs: 300_000,
         });
+    });
+
+    it('configures or disables the idle disconnect timeout', () => {
+        expect(
+            parseEnvironment({ ...validInput, IDLE_DISCONNECT_SECONDS: '15' }).idleDisconnectMs,
+        ).toBe(15_000);
+        expect(
+            parseEnvironment({ ...validInput, IDLE_DISCONNECT_SECONDS: '0' }).idleDisconnectMs,
+        ).toBe(0);
+        expect(() => parseEnvironment({ ...validInput, IDLE_DISCONNECT_SECONDS: '-1' })).toThrow(
+            ConfigurationError,
+        );
     });
 
     it('validates and returns a configured default volume', () => {

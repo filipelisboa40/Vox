@@ -20,8 +20,9 @@ export class UnsupportedMediaUrlError extends MediaProviderError {
 }
 
 export class NoMediaResultsError extends MediaProviderError {
-    public constructor(query: string) {
-        super(`No media results were found for: ${query}`);
+    public constructor(query?: string) {
+        super('No media results were found');
+        void query;
         this.name = 'NoMediaResultsError';
     }
 }
@@ -47,5 +48,12 @@ export class ProviderOperationError extends MediaProviderError {
     public constructor(providerName: string, options?: ErrorOptions) {
         super(`The ${providerName} provider failed to complete the request`, options);
         this.name = 'ProviderOperationError';
+    }
+}
+
+export class ProviderTimeoutError extends MediaProviderError {
+    public constructor() {
+        super('The media provider took too long to respond');
+        this.name = 'ProviderTimeoutError';
     }
 }

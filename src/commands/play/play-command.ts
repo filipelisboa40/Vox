@@ -2,6 +2,7 @@ import { SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.j
 
 import type { Track } from '../../models/track.js';
 import type { GuildPlayer } from '../../player/guild-player.js';
+import { VoiceConnectionTimeoutError } from '../../player/guild-player.js';
 import {
     PlayerVoiceChannelMismatchError,
     type JoinGuildPlayerOptions,
@@ -15,6 +16,10 @@ import type { ProviderTrack } from '../../providers/audio-provider.js';
 import { MediaProviderError } from '../../providers/provider-errors.js';
 import { escapeDiscordFormatting } from '../../utilities/external-text.js';
 import { formatDuration } from '../../utilities/playback-format.js';
+import {
+    MediaLookupLimiter,
+    MediaLookupRateLimitError,
+} from '../../utilities/media-lookup-limiter.js';
 import type { Command } from '../command.js';
 
 export interface TrackResolver {
@@ -31,6 +36,7 @@ export interface PlayCommandDependencies {
     readonly resolveVoiceTarget?: (
         interaction: ChatInputCommandInteraction,
     ) => Promise<VoiceJoinTarget>;
+    readonly lookupLimiter?: Pick<MediaLookupLimiter, 'acquire'>;
 }
 
 export const playCommandData = new SlashCommandBuilder()
@@ -42,6 +48,7 @@ export const playCommandData = new SlashCommandBuilder()
 
 export function createPlayCommand(dependencies: PlayCommandDependencies): Command {
     const voiceTargetResolver = dependencies.resolveVoiceTarget ?? resolveVoiceJoinTarget;
+    const lookupLimiter = dependencies.lookupLimiter ?? new MediaLookupLimiter();
 
     return {
         data: playCommandData,
@@ -49,9 +56,11 @@ export function createPlayCommand(dependencies: PlayCommandDependencies): Comman
         execute: async (interaction) => {
             try {
                 const voiceTarget = await voiceTargetResolver(interaction);
+                lookupLimiter.acquire(`${voiceTarget.guildId}:${interaction.user.id}`);
                 const query = interaction.options.getString('query', true);
                 const providerTrack = await dependencies.providers.resolve(query);
                 const guildPlayer = dependencies.players.getOrCreate(voiceTarget);
+                await guildPlayer.waitUntilReady();
 
                 if (guildPlayer.playback === undefined) {
                     throw new Error('The guild player does not have a playback controller');
@@ -64,6 +73,8 @@ export function createPlayCommand(dependencies: PlayCommandDependencies): Comman
                 if (
                     error instanceof MediaProviderError ||
                     error instanceof VoiceAccessError ||
+                    error instanceof VoiceConnectionTimeoutError ||
+                    error instanceof MediaLookupRateLimitError ||
                     error instanceof PlayerVoiceChannelMismatchError
                 ) {
                     await interaction.editReply(error.message);

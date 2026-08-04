@@ -2,6 +2,7 @@ import { MessageFlags, type Interaction } from 'discord.js';
 import type { Logger } from 'pino';
 
 import type { CommandRegistry } from '../commands/command-registry.js';
+import type { KeyedOperationQueue } from '../utilities/keyed-operation-queue.js';
 
 const genericErrorMessage = 'The command could not be completed. Please try again.';
 
@@ -9,6 +10,7 @@ export async function handleInteraction(
     interaction: Interaction,
     commandRegistry: CommandRegistry,
     logger: Logger,
+    operationQueue?: KeyedOperationQueue,
 ): Promise<void> {
     if (!interaction.isChatInputCommand()) {
         return;
@@ -32,7 +34,14 @@ export async function handleInteraction(
             });
         }
 
-        await command.execute(interaction);
+        const operation = () => command.execute(interaction);
+        const guildId = interaction.guildId;
+
+        if (guildId !== null && operationQueue !== undefined) {
+            await operationQueue.run(guildId, operation);
+        } else {
+            await operation();
+        }
     } catch (error: unknown) {
         logger.error(
             { commandName: interaction.commandName, error, interactionId: interaction.id },

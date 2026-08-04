@@ -38,17 +38,18 @@ The compiled application is written to `dist/` and can be run with `pnpm start`.
 Copy `.env.example` to `.env` and provide the Discord application values from the
 [Discord Developer Portal](https://discord.com/developers/applications). Never commit `.env`.
 
-| Variable            | Required | Description                                          |
-| ------------------- | -------- | ---------------------------------------------------- |
-| `DISCORD_TOKEN`     | Yes      | Secret bot token                                     |
-| `DISCORD_CLIENT_ID` | Yes      | Discord application ID                               |
-| `YOUTUBE_API_KEY`   | Yes      | YouTube Data API v3 key for search and metadata      |
-| `LAVALINK_URL`      | Yes      | Base URL of the Lavalink media server                |
-| `LAVALINK_PASSWORD` | Yes      | Password configured on the Lavalink server           |
-| `DEFAULT_VOLUME`    | No       | Initial per-server volume from 0–100; defaults to 50 |
-| `DISCORD_GUILD_ID`  | No       | Development server ID for future command deploys     |
-| `YOUTUBE_REGION`    | No       | Two-letter region for search and availability checks |
-| `LOG_LEVEL`         | No       | Pino logging level; defaults to `info`               |
+| Variable                  | Required | Description                                          |
+| ------------------------- | -------- | ---------------------------------------------------- |
+| `DISCORD_TOKEN`           | Yes      | Secret bot token                                     |
+| `DISCORD_CLIENT_ID`       | Yes      | Discord application ID                               |
+| `YOUTUBE_API_KEY`         | Yes      | YouTube Data API v3 key for search and metadata      |
+| `LAVALINK_URL`            | Yes      | Base URL of the Lavalink media server                |
+| `LAVALINK_PASSWORD`       | Yes      | Password configured on the Lavalink server           |
+| `DEFAULT_VOLUME`          | No       | Initial per-server volume from 0–100; defaults to 50 |
+| `IDLE_DISCONNECT_SECONDS` | No       | Idle seconds before disconnecting; `0` disables it   |
+| `DISCORD_GUILD_ID`        | No       | Development server ID for future command deploys     |
+| `YOUTUBE_REGION`          | No       | Two-letter region for search and availability checks |
+| `LOG_LEVEL`               | No       | Pino logging level; defaults to `info`               |
 
 ## Lavalink
 

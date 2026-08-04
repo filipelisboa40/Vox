@@ -8,6 +8,7 @@ import {
     InvalidMediaQueryError,
     MediaProviderError,
     ProviderOperationError,
+    ProviderTimeoutError,
     UnsupportedMediaUrlError,
 } from './provider-errors.js';
 
@@ -17,6 +18,7 @@ export class ProviderManager {
     public constructor(
         providers: readonly AudioProvider[],
         private readonly searchProvider: AudioProvider | undefined = providers[0],
+        private readonly operationTimeoutMs = 15_000,
     ) {
         for (const provider of providers) {
             if (this.#providersByName.has(provider.name)) {
@@ -89,13 +91,31 @@ export class ProviderManager {
         operation: () => Promise<T>,
     ): Promise<T> {
         try {
-            return await operation();
+            return await withTimeout(operation(), this.operationTimeoutMs);
         } catch (error: unknown) {
             if (error instanceof MediaProviderError) {
                 throw error;
             }
 
             throw new ProviderOperationError(provider.name, { cause: error });
+        }
+    }
+}
+
+async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    try {
+        return await Promise.race([
+            operation,
+            new Promise<never>((_resolve, reject) => {
+                timeout = setTimeout(() => reject(new ProviderTimeoutError()), timeoutMs);
+                timeout.unref?.();
+            }),
+        ]);
+    } finally {
+        if (timeout !== undefined) {
+            clearTimeout(timeout);
         }
     }
 }

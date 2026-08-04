@@ -103,6 +103,95 @@ describe('PlaybackController', () => {
         expect(controller.queue.isEmpty).toBe(true);
     });
 
+    it('restarts a naturally completed track from zero in track-loop mode', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const track = createTrack('looped');
+        await controller.enqueue(track);
+        controller.toggleTrackLoop();
+        resources.clearCurrent();
+
+        await controller.handleTrackFinished(track);
+
+        expect(resources.play).toHaveBeenLastCalledWith(track, { startPositionMs: 0 });
+        expect(controller.currentTrack).toBe(track);
+    });
+
+    it('appends completed tracks before advancing in queue-loop mode', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const first = createTrack('first');
+        const second = createTrack('second');
+        await controller.enqueue(first);
+        await controller.enqueue(second);
+        controller.toggleQueueLoop();
+        resources.clearCurrent();
+
+        await controller.handleTrackFinished(first);
+
+        expect(controller.currentTrack).toBe(second);
+        expect(controller.queue.snapshot()).toEqual([first]);
+    });
+
+    it('restarts a single completed track in queue-loop mode', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const track = createTrack('only');
+        await controller.enqueue(track);
+        controller.toggleQueueLoop();
+        resources.clearCurrent();
+
+        await controller.handleTrackFinished(track);
+
+        expect(controller.currentTrack).toBe(track);
+        expect(controller.queue.isEmpty).toBe(true);
+    });
+
+    it('manual skip bypasses track-loop repetition for that transition', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const first = createTrack('first');
+        const second = createTrack('second');
+        await controller.enqueue(first);
+        await controller.enqueue(second);
+        controller.toggleTrackLoop();
+
+        await controller.skip();
+
+        expect(controller.currentTrack).toBe(second);
+        expect(resources.play).not.toHaveBeenCalledWith(first, { startPositionMs: 0 });
+        expect(controller.loopMode).toBe(LoopMode.Track);
+    });
+
+    it('advances past errors without adding failed tracks to queue-loop rotation', async () => {
+        const resources = createResourceFixture();
+        const controller = new PlaybackController(resources.resources, createLogger());
+        const failed = createTrack('failed');
+        const next = createTrack('next');
+        await controller.enqueue(failed);
+        await controller.enqueue(next);
+        controller.toggleQueueLoop();
+        resources.clearCurrent();
+
+        await controller.handleTrackFailed();
+
+        expect(controller.currentTrack).toBe(next);
+        expect(controller.queue.isEmpty).toBe(true);
+    });
+
+    it('keeps track and queue loop modes mutually exclusive while toggling', () => {
+        const controller = new PlaybackController(
+            createResourceFixture().resources,
+            createLogger(),
+        );
+
+        expect(controller.toggleTrackLoop()).toBe(LoopMode.Track);
+        expect(controller.toggleQueueLoop()).toBe(LoopMode.Queue);
+        expect(controller.toggleQueueLoop()).toBe(LoopMode.Off);
+        expect(controller.toggleTrackLoop()).toBe(LoopMode.Track);
+        expect(controller.toggleTrackLoop()).toBe(LoopMode.Off);
+    });
+
     it('skips an unplayable waiting track and continues', async () => {
         const resources = createResourceFixture([true, false, true]);
         const controller = new PlaybackController(resources.resources, createLogger());

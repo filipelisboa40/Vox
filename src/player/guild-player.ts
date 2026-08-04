@@ -20,6 +20,14 @@ export interface GuildPlayerOptions {
     readonly onDestroyed: () => void;
     readonly playback?: PlaybackController;
     readonly defaultVolume?: number;
+    readonly idleDisconnectMs?: number;
+}
+
+export class VoiceConnectionTimeoutError extends Error {
+    public constructor(options?: ErrorOptions) {
+        super('The bot could not connect to the voice channel in time', options);
+        this.name = 'VoiceConnectionTimeoutError';
+    }
 }
 
 export class GuildPlayer {
@@ -31,6 +39,8 @@ export class GuildPlayer {
     public readonly playback: PlaybackController | undefined;
     #volume: number;
     #destroyed = false;
+    #idleTimer: ReturnType<typeof setTimeout> | undefined;
+    readonly #idleDisconnectMs: number;
 
     public constructor(options: GuildPlayerOptions) {
         this.guildId = options.guildId;
@@ -40,6 +50,7 @@ export class GuildPlayer {
         this.#logger = options.logger;
         this.playback = options.playback;
         this.#volume = validateGuildVolume(options.defaultVolume ?? 0.5);
+        this.#idleDisconnectMs = options.idleDisconnectMs ?? 300_000;
 
         this.connection.subscribe(this.audioPlayer);
         this.#registerLifecycleHandlers(options.onDestroyed);
@@ -51,6 +62,7 @@ export class GuildPlayer {
         }
 
         this.#destroyed = true;
+        this.#cancelIdleTimer();
         await this.playback?.dispose();
 
         if (this.playback === undefined) {
@@ -70,6 +82,19 @@ export class GuildPlayer {
         const normalized = validateGuildVolume(volume);
         this.playback?.setVolume(normalized);
         this.#volume = normalized;
+    }
+
+    public async waitUntilReady(timeoutMs = 15_000): Promise<void> {
+        if (this.connection.state.status === VoiceConnectionStatus.Ready) {
+            return;
+        }
+
+        try {
+            await entersState(this.connection, VoiceConnectionStatus.Ready, timeoutMs);
+        } catch (error: unknown) {
+            await this.destroy();
+            throw new VoiceConnectionTimeoutError({ cause: error });
+        }
     }
 
     #registerLifecycleHandlers(onDestroyed: () => void): void {
@@ -93,18 +118,66 @@ export class GuildPlayer {
         });
 
         this.connection.on(VoiceConnectionStatus.Destroyed, () => {
+            const externallyDestroyed = !this.#destroyed;
             this.#destroyed = true;
+            this.#cancelIdleTimer();
             onDestroyed();
+
+            if (externallyDestroyed) {
+                void this.#disposeAfterExternalDisconnect();
+            }
             this.#logger.info({ guildId: this.guildId }, 'Voice connection was destroyed');
         });
 
+        this.audioPlayer.on(AudioPlayerStatus.Playing, () => this.#cancelIdleTimer());
+
         this.audioPlayer.on(AudioPlayerStatus.Idle, () => {
             this.#logger.debug({ guildId: this.guildId }, 'Guild audio player is idle');
+            this.#scheduleIdleDisconnect();
         });
 
         this.audioPlayer.on('error', (error) => {
             this.#logger.error({ error, guildId: this.guildId }, 'Guild audio player failed');
         });
+    }
+
+    #scheduleIdleDisconnect(): void {
+        if (this.#destroyed || this.#idleDisconnectMs === 0 || this.#idleTimer !== undefined) {
+            return;
+        }
+
+        this.#idleTimer = setTimeout(() => {
+            this.#idleTimer = undefined;
+
+            if (
+                this.audioPlayer.state.status === AudioPlayerStatus.Idle &&
+                this.playback?.currentTrack === undefined &&
+                (this.playback?.queue.isEmpty ?? true)
+            ) {
+                void this.destroy().catch((error: unknown) => {
+                    this.#logger.error(
+                        { error, guildId: this.guildId },
+                        'Idle guild player cleanup failed',
+                    );
+                });
+            }
+        }, this.#idleDisconnectMs);
+        this.#idleTimer.unref?.();
+    }
+
+    #cancelIdleTimer(): void {
+        if (this.#idleTimer !== undefined) {
+            clearTimeout(this.#idleTimer);
+            this.#idleTimer = undefined;
+        }
+    }
+
+    async #disposeAfterExternalDisconnect(): Promise<void> {
+        await this.playback?.dispose();
+
+        if (this.playback === undefined) {
+            this.audioPlayer.stop(true);
+        }
     }
 
     async #recoverConnection(): Promise<void> {

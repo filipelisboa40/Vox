@@ -90,6 +90,25 @@ export class PlayerManager {
             await player.destroy();
         }
     }
+
+    public async handleBotVoiceStateUpdate(options: {
+        readonly guildId: string;
+        readonly userId: string;
+        readonly botUserId: string;
+        readonly voiceChannelId: string | null;
+    }): Promise<boolean> {
+        const player = this.#players.get(options.guildId);
+
+        if (
+            options.userId !== options.botUserId ||
+            player === undefined ||
+            player.voiceChannelId === options.voiceChannelId
+        ) {
+            return false;
+        }
+
+        return this.destroy(options.guildId);
+    }
 }
 
 function createDefaultGuildPlayer(logger: Logger): GuildPlayerFactory {
@@ -118,6 +137,7 @@ export function createManagedGuildPlayerFactory(
     logger: Logger,
     providerManager: ProviderManager,
     defaultVolume = 0.5,
+    idleDisconnectMs = 300_000,
 ): GuildPlayerFactory {
     return (options, onDestroyed) => {
         const connection = joinVoiceChannel({
@@ -134,8 +154,8 @@ export function createManagedGuildPlayerFactory(
             audioPlayer,
             provider: providerManager,
             logger,
-            onTrackFinished: () => playbackReference.current?.advance(),
-            onTrackFailed: () => playbackReference.current?.advance(),
+            onTrackFinished: (track) => playbackReference.current?.handleTrackFinished(track),
+            onTrackFailed: () => playbackReference.current?.handleTrackFailed(),
             defaultVolume,
         });
         const playback = new PlaybackController(audioResources, logger);
@@ -147,6 +167,7 @@ export function createManagedGuildPlayerFactory(
             audioPlayer,
             playback,
             defaultVolume,
+            idleDisconnectMs,
             logger,
             onDestroyed,
         });
