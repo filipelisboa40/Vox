@@ -49,6 +49,8 @@ RUN --mount=type=cache,id=pnpm-prod,target=/pnpm/store \
 
 FROM node:24-bookworm-slim AS runtime
 
+LABEL org.opencontainers.image.source="https://github.com/filipelisboa40/Vox"
+
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV UV_THREADPOOL_SIZE=2

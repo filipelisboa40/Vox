@@ -185,6 +185,32 @@ docker compose up -d
 docker compose logs --follow
 ```
 
+After the GitHub workflow publishes `ghcr.io/filipelisboa40/vox:latest`, start the same optimized
+container directly on Raspberry Pi OS with:
+
+```shell
+cp .env.example .env
+# Edit .env and set DISCORD_TOKEN and DISCORD_CLIENT_ID first.
+sh scripts/run-docker.sh
+```
+
+On PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+# Edit .env and set DISCORD_TOKEN and DISCORD_CLIENT_ID first.
+.\scripts\run-docker.ps1
+```
+
+The scripts use `--env-file` so secrets do not appear in shell history. They pull the public GHCR
+image and apply the same Raspberry Pi resource and security limits as Compose. To test an image
+built locally, run `VOX_IMAGE=vox-bot:local sh scripts/run-docker.sh` or pass
+`-Image vox-bot:local` to the PowerShell script.
+
+The first GHCR package is private by default. After the workflow publishes it, open the package
+settings on GitHub and change its visibility to public if you want Raspberry Pis to pull it without
+running `docker login ghcr.io`.
+
 Confirm all three runtime tools and the non-root identity:
 
 ```shell
