@@ -1,165 +1,203 @@
+<div align="center">
+
 # Vox
 
-Vox is a Discord music bot written in TypeScript. It uses `yt-dlp` for YouTube search, metadata,
-and audio retrieval, then FFmpeg prepares that audio for Discord. Each Discord server has an
-independent queue.
+### A lightweight, self-hosted Discord music bot built for YouTube
 
-## Content and YouTube terms
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-24-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-optimized-C51A4A?logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 
-Only play content that you are authorized to access and use. You are responsible for complying
-with copyright law, the YouTube Terms of Service, Discord's terms, and the rules that apply in your
-country. This project does not grant permission to copy, redistribute, archive, or bypass access
-controls on any media. Do not use it to play private, paid, age-restricted, geographically blocked,
-or otherwise unauthorized content.
+YouTube search · Per-server queues · Direct Opus playback · Raspberry Pi friendly
 
-## Requirements
+[Quick start](#quick-start) · [Commands](#commands) · [Configuration](#configuration) · [Development](#development)
 
-- Node.js 24 or newer
-- pnpm 11
-- A Discord application and bot token
-- FFmpeg available on `PATH`
-- `yt-dlp` available on `PATH`
+</div>
 
-## 1. Create the Discord application
+Vox is a TypeScript Discord music bot powered by `yt-dlp`. It requests WebM/Opus audio and sends
+it directly to Discord without live transcoding during normal playback. Every Discord server gets
+an independent player, queue, history, and loop state.
 
-1. Open the [Discord Developer Portal](https://discord.com/developers/applications), select
-   **New Application**, and give it a name.
-2. Open **Bot**, create the bot user, and reset/copy its token. Treat this token like a password.
-3. Leave privileged gateway intents disabled. Vox only requests the standard `Guilds` and
-   `Guild Voice States` intents.
-4. Open **Installation**. For a private application, set the default authorization link to
-   **None**; Discord rejects private applications that have a default authorization link.
-5. Copy the **Application ID** from **General Information**.
+## Features
 
-Invite the bot by replacing `YOUR_APPLICATION_ID` in this URL:
+- Search YouTube or play a YouTube URL with `/play`.
+- Pause, resume, replay, seek, skip, and restore skipped tracks.
+- Reorder, remove, clear, shuffle, and inspect the queue.
+- Loop one track or the complete queue.
+- Automatically disconnect when inactive.
+- Run without Lavalink, Java, Spotify credentials, or a YouTube API key.
+- Use a small multi-platform Docker image on `amd64` and Raspberry Pi `arm64`.
+- Constrain memory, CPU, processes, privileges, temporary storage, and logs.
+
+## Quick start
+
+You need a Discord bot token and its application ID. Start the latest published image with one
+command:
+
+```bash
+docker run -it --pull always \
+  -e DISCORD_TOKEN='YOUR_TOKEN' \
+  -e DISCORD_CLIENT_ID='YOUR_APPLICATION_ID' \
+  ghcr.io/filipelisboa40/vox:latest
+```
+
+Docker downloads the prebuilt image automatically. You do not need to clone this repository or
+install Node.js, FFmpeg, or yt-dlp on the host.
+
+> [!TIP]
+> Replace `-it` with `-d --name vox --restart unless-stopped` to run Vox continuously in the
+> background.
+
+For the Raspberry Pi resource and security limits used by this project:
+
+```bash
+docker run -d --pull always \
+  --name vox \
+  --restart unless-stopped \
+  -e DISCORD_TOKEN='YOUR_TOKEN' \
+  -e DISCORD_CLIENT_ID='YOUR_APPLICATION_ID' \
+  --memory 512m \
+  --memory-reservation 256m \
+  --cpus 2 \
+  --pids-limit 64 \
+  --read-only \
+  --tmpfs /tmp:size=64m,mode=1777 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --log-opt max-size=5m \
+  --log-opt max-file=2 \
+  ghcr.io/filipelisboa40/vox:latest
+```
+
+Follow or stop the background container with:
+
+```bash
+docker logs --follow vox
+docker stop vox
+```
+
+## Create and invite the Discord bot
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and create an
+   application.
+2. Open **Bot**, create the bot user, and copy its token. Treat the token like a password.
+3. Copy the **Application ID** from **General Information**.
+4. For a private application, open **Installation** and set the default authorization link to
+   **None**.
+5. Replace `YOUR_APPLICATION_ID` in the URL below and open it:
 
 ```text
 https://discord.com/oauth2/authorize?client_id=YOUR_APPLICATION_ID&permissions=3146752&scope=bot%20applications.commands
 ```
 
-The invitation requests `View Channel`, `Connect`, and `Speak`, plus the `applications.commands`
-scope. Select a server where you have permission to manage integrations. Channel-specific denies
-can still prevent Vox from joining or speaking.
+The invitation requests `View Channel`, `Connect`, and `Speak`, together with the
+`applications.commands` scope.
 
-## 2. Install FFmpeg and yt-dlp
+## Configuration
 
-Install current releases of [FFmpeg](https://ffmpeg.org/download.html) and
-[yt-dlp](https://github.com/yt-dlp/yt-dlp/wiki/Installation), then restart the terminal and verify:
-
-```shell
-ffmpeg -version
-yt-dlp --version
-```
-
-On Windows, `winget install yt-dlp.yt-dlp` installs `yt-dlp`. Install FFmpeg with your preferred
-package manager and ensure both executable directories are on `PATH`. If `yt-dlp` is stored in a
-custom location, set `YT_DLP_PATH` to the full executable path.
-
-## 3. Install and configure Vox
-
-Install dependencies and create the local environment file:
-
-```shell
-pnpm install
-cp .env.example .env
-```
-
-On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if needed. Never commit `.env`.
+For longer commands and production deployments, keep secrets in `.env` and pass
+`--env-file .env` instead of individual `-e` arguments.
 
 | Variable                  | Required | Description                                                     |
 | ------------------------- | -------- | --------------------------------------------------------------- |
-| `DISCORD_TOKEN`           | Yes      | Secret bot token from the Discord Developer Portal              |
+| `DISCORD_TOKEN`           | Yes      | Secret token from the Discord Developer Portal                  |
 | `DISCORD_CLIENT_ID`       | Yes      | Discord application ID                                          |
-| `YT_DLP_PATH`             | No       | Full yt-dlp path; defaults to resolving `yt-dlp` from `PATH`    |
-| `IDLE_DISCONNECT_SECONDS` | No       | Idle time before disconnecting; defaults to `300`; `0` disables |
 | `DISCORD_GUILD_ID`        | No       | Development server ID for fast guild command deployment         |
-| `LOG_LEVEL`               | No       | Pino level such as `debug`, `info`, `warn`, or `error`          |
+| `IDLE_DISCONNECT_SECONDS` | No       | Idle time before disconnecting; defaults to `300`; `0` disables |
+| `YT_DLP_PATH`             | No       | Custom yt-dlp executable; the container configures this         |
+| `LOG_LEVEL`               | No       | Pino level: `debug`, `info`, `warn`, or `error`                 |
 
-## 4. Deploy commands and run
+Vox does not persist queues or settings, so no `/data` volume is required.
 
-For development, set `DISCORD_GUILD_ID` and deploy commands to that server:
+## Commands
 
-```shell
+The user must be in a voice channel. Playback controls require the user to share Vox's current
+voice channel.
+
+| Command        | Options                                      | Description                                                     |
+| -------------- | -------------------------------------------- | --------------------------------------------------------------- |
+| `/play`        | `query` — song name or supported URL         | Finds a YouTube track and starts or queues it                   |
+| `/pause`       | None                                         | Pauses playback                                                 |
+| `/resume`      | None                                         | Resumes paused playback                                         |
+| `/stop`        | None                                         | Stops playback and clears queue, history, and loop state        |
+| `/skip`        | None                                         | Skips the current track                                         |
+| `/unskip`      | None                                         | Restores the most recently manually skipped track when possible |
+| `/next`        | None                                         | Shows the next track and estimated wait                         |
+| `/replay`      | None                                         | Restarts the current track                                      |
+| `/seek`        | `position` — seconds, `MM:SS`, or `HH:MM:SS` | Moves to an absolute position                                   |
+| `/fseek`       | `amount` — signed seconds                    | Moves forward or backward                                       |
+| `/now-playing` | None                                         | Shows track, progress, requester, and loop state                |
+| `/queue`       | `page` — optional page number                | Shows the waiting queue                                         |
+| `/clear`       | None                                         | Removes waiting tracks without stopping the current track       |
+| `/remove`      | `position` — one-based queue position        | Removes a waiting track                                         |
+| `/move`        | `from`, `to` — one-based positions           | Reorders a waiting track                                        |
+| `/shuffle`     | None                                         | Randomizes the queue                                            |
+| `/loop`        | None                                         | Toggles current-track looping                                   |
+| `/loop-queue`  | None                                         | Toggles complete-queue looping                                  |
+| `/disconnect`  | None                                         | Stops, clears, and disconnects Vox                              |
+
+Track and queue looping are mutually exclusive. `/volume` is intentionally unavailable because
+software volume processing would disable direct Opus playback; listeners can use Discord's local
+volume control.
+
+## Docker Compose
+
+Clone the project if you want to build the image yourself:
+
+```bash
+git clone https://github.com/filipelisboa40/Vox.git
+cd Vox
+cp .env.example .env
+# Edit .env before continuing.
+docker compose up -d --build
+docker compose logs --follow
+```
+
+The production image contains Node.js 24, FFmpeg, and a checksum-verified yt-dlp executable. It
+runs as a non-root user and supports `linux/amd64` and `linux/arm64`.
+
+Convenience launchers are also available:
+
+```bash
+sh scripts/run-docker.sh
+```
+
+```powershell
+.\scripts\run-docker.ps1
+```
+
+## Development
+
+### Requirements
+
+- Node.js 24 or newer
+- pnpm 11
+- FFmpeg on `PATH`
+- yt-dlp on `PATH`
+
+### Install and run
+
+```bash
+pnpm install
+cp .env.example .env
 pnpm deploy:commands
 pnpm dev
 ```
 
-Without `DISCORD_GUILD_ID`, deployment is global. You can also explicitly deploy globally:
+Set `DISCORD_GUILD_ID` for fast guild-scoped command deployment. Without it, commands are deployed
+globally and may take longer to appear.
 
-```shell
-pnpm deploy:commands --global
-```
+Production-style local run:
 
-Guild commands normally update quickly. Global Discord command changes can take longer to appear.
-For a production-style local run:
-
-```shell
+```bash
 pnpm build
 pnpm start
 ```
 
-Press Ctrl+C to dispose players, cancel timers, disconnect voice sessions, and close Discord.
+### Quality checks
 
-## Command reference
-
-The user must be in a voice channel for playback commands. Control commands require the user to
-share Vox's current channel.
-
-| Command        | Options                                               | Description                                                         |
-| -------------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
-| `/play`        | `query` (required song name or supported URL)         | Finds a YouTube track and starts or queues it                       |
-| `/pause`       | None                                                  | Pauses the current track                                            |
-| `/resume`      | None                                                  | Resumes paused playback                                             |
-| `/stop`        | None                                                  | Stops playback and clears the waiting queue, history, and loop mode |
-| `/skip`        | None                                                  | Skips the current track                                             |
-| `/unskip`      | None                                                  | Restores the most recently manually skipped track when possible     |
-| `/next`        | None                                                  | Shows the next queued track and estimated wait                      |
-| `/replay`      | None                                                  | Restarts the current track                                          |
-| `/seek`        | `position` (required seconds, `MM:SS`, or `HH:MM:SS`) | Moves to an absolute track position                                 |
-| `/fseek`       | `amount` (required signed seconds)                    | Moves forward or backward relative to the current position          |
-| `/now-playing` | None                                                  | Shows track, progress, requester, and loop state                    |
-| `/queue`       | `page` (optional, starts at `1`)                      | Shows a paginated waiting queue                                     |
-| `/clear`       | None                                                  | Removes waiting tracks without interrupting the current track       |
-| `/remove`      | `position` (required one-based queue position)        | Removes one waiting track                                           |
-| `/move`        | `from`, `to` (required one-based positions)           | Reorders a waiting track                                            |
-| `/shuffle`     | None                                                  | Randomizes the waiting queue                                        |
-| `/loop`        | None                                                  | Toggles repetition of the current track                             |
-| `/loop-queue`  | None                                                  | Toggles repetition of the complete queue                            |
-| `/disconnect`  | None                                                  | Stops, clears, and disconnects Vox from voice                       |
-
-Track loop and queue loop are mutually exclusive. Seeking depends on provider support. `/unskip`
-only tracks manual skips and cannot always restore a source that has become unavailable.
-
-## Troubleshooting
-
-### Commands do not appear
-
-- Run `pnpm deploy:commands` after adding or changing commands.
-- Confirm `DISCORD_CLIENT_ID` belongs to the same application as `DISCORD_TOKEN`.
-- Use `DISCORD_GUILD_ID` while developing and confirm the bot is installed in that server.
-- Reinvite with both `bot` and `applications.commands` scopes.
-- Allow more time for global command deployment.
-
-### Vox cannot join or speak
-
-- Join a voice channel before using `/play`.
-- Grant the bot `View Channel`, `Connect`, and `Speak` on that channel.
-- Check category and channel permission overrides; explicit denies override server roles.
-- If a moderator moved or disconnected Vox, run `/play` again to create a fresh session.
-
-### Tracks are unavailable or stop immediately
-
-- Run `yt-dlp --version` and `ffmpeg -version` in the same environment that starts Vox.
-- Update `yt-dlp`; YouTube changes frequently and old versions can stop working.
-- Check that the video is public, available in your region, and authorized for your use.
-- Run `yt-dlp -f "bestaudio[acodec=opus][ext=webm]" -o - VIDEO_URL` manually to inspect extractor errors.
-- If seeking fails, confirm FFmpeg is on `PATH`; `yt-dlp --download-sections` requires FFmpeg.
-
-## Development checks
-
-Run the complete quality gate before committing:
-
-```shell
+```bash
 pnpm format
 pnpm lint
 pnpm typecheck
@@ -168,62 +206,47 @@ pnpm build
 pnpm format:check
 ```
 
-Commands are registered explicitly in [`src/commands/index.ts`](./src/commands/index.ts), playback
-state is isolated per guild, and media/provider errors are converted to safe user-facing messages.
+## Troubleshooting
 
-## Docker deployment
+<details>
+<summary><strong>Commands do not appear</strong></summary>
 
-The production image contains Node.js 24, FFmpeg, and a checksum-verified official `yt-dlp`
-executable. It builds TypeScript separately, installs production dependencies from the lockfile,
-runs as the non-root `node` user, and uses `dumb-init` for graceful `SIGTERM` handling.
+- Run `pnpm deploy:commands` after command changes.
+- Confirm the client ID and token belong to the same Discord application.
+- Confirm Vox was invited with both `bot` and `applications.commands` scopes.
+- Guild commands update quickly; global commands can take longer.
 
-Build and start the bot:
+</details>
 
-```shell
-docker compose build
-docker compose up -d
-docker compose logs --follow
-```
+<details>
+<summary><strong>Vox cannot join or speak</strong></summary>
 
-After the GitHub workflow publishes `ghcr.io/filipelisboa40/vox:latest`, start the same optimized
-container directly on Raspberry Pi OS with:
+- Join a voice channel before using `/play`.
+- Grant Vox `View Channel`, `Connect`, and `Speak` permissions.
+- Check category and channel permission overrides.
 
-```shell
-cp .env.example .env
-# Edit .env and set DISCORD_TOKEN and DISCORD_CLIENT_ID first.
-sh scripts/run-docker.sh
-```
+</details>
 
-On PowerShell:
+<details>
+<summary><strong>Tracks are unavailable or stop immediately</strong></summary>
 
-```powershell
-Copy-Item .env.example .env
-# Edit .env and set DISCORD_TOKEN and DISCORD_CLIENT_ID first.
-.\scripts\run-docker.ps1
-```
+- Update yt-dlp because YouTube extractor behavior changes regularly.
+- Confirm the video is public and available in your region.
+- Check container output with `docker logs vox`.
+- Seeking requires FFmpeg, which is already included in the published image.
 
-The scripts use `--env-file` so secrets do not appear in shell history. They pull the public GHCR
-image and apply the same Raspberry Pi resource and security limits as Compose. To test an image
-built locally, run `VOX_IMAGE=vox-bot:local sh scripts/run-docker.sh` or pass
-`-Image vox-bot:local` to the PowerShell script.
+</details>
 
-The first GHCR package is private by default. After the workflow publishes it, open the package
-settings on GitHub and change its visibility to public if you want Raspberry Pis to pull it without
-running `docker login ghcr.io`.
+## Responsible use
 
-Confirm all three runtime tools and the non-root identity:
+Only play content you are authorized to access and use. You are responsible for complying with
+copyright law, the YouTube Terms of Service, Discord's terms, and applicable local rules. Vox does
+not grant permission to copy, redistribute, archive, or bypass access controls on media.
 
-```shell
-docker compose exec bot node --version
-docker compose exec bot ffmpeg -version
-docker compose exec bot yt-dlp --version
-docker compose exec bot id
-```
+---
 
-Rebuild after source or dependency changes, then stop gracefully:
+<div align="center">
 
-```shell
-docker compose build --pull
-docker compose up -d --remove-orphans
-docker compose down
-```
+Built with TypeScript, discord.js, yt-dlp, and far too many songs in the queue.
+
+</div>
