@@ -17,6 +17,8 @@ services:
             NODE_OPTIONS: --max-old-space-size=256
             UV_THREADPOOL_SIZE: 2
             YT_DLP_PATH: /usr/local/bin/yt-dlp
+            HOME: /tmp
+            XDG_CACHE_HOME: /tmp/.cache
         mem_limit: 512m
         mem_reservation: 256m
         cpus: 2.0

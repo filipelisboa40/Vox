@@ -19,6 +19,7 @@ import { normalizeExternalText } from '../../utilities/external-text.js';
 const youtubeVideoIdPattern = /^[A-Za-z0-9_-]{11}$/;
 const defaultMaximumDurationMs = 12 * 60 * 60 * 1_000;
 const maximumMetadataBytes = 1024 * 1024;
+const maximumErrorBytes = 16 * 1024;
 const processStartTimeoutMs = 15_000;
 
 export interface YtDlpMetadata {
@@ -193,10 +194,12 @@ export class ProcessYtDlpRunner implements YtDlpRunner {
             '--dump-single-json',
             '--no-playlist',
             '--no-warnings',
+            '--no-cache-dir',
             '--skip-download',
             input,
         ]);
-        const exit = waitForExit(process);
+        const exitPromise = waitForExit(process);
+        const errorOutputPromise = readErrorOutput(process.stderr);
         const chunks: Buffer[] = [];
         let byteLength = 0;
 
@@ -212,11 +215,14 @@ export class ProcessYtDlpRunner implements YtDlpRunner {
             chunks.push(buffer);
         }
 
-        const code = await exit;
+        const [code, errorOutput] = await Promise.all([exitPromise, errorOutputPromise]);
 
         if (code !== 0) {
+            const details = errorOutput.trim();
             throw new MediaUnavailableError(
-                `yt-dlp metadata lookup exited with code ${String(code)}`,
+                details.length > 0
+                    ? `yt-dlp metadata lookup failed: ${details}`
+                    : `yt-dlp metadata lookup exited with code ${String(code)}`,
             );
         }
 
@@ -251,6 +257,18 @@ export class ProcessYtDlpRunner implements YtDlpRunner {
             windowsHide: true,
         });
     }
+}
+
+async function readErrorOutput(stream: Readable): Promise<string> {
+    let output = Buffer.alloc(0);
+
+    for await (const chunk of stream) {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+        output = Buffer.concat([output, buffer]).subarray(-maximumErrorBytes);
+    }
+
+    // Keep draining the pipe, but retain only the useful end of the error output.
+    return output.toString('utf8');
 }
 
 /**

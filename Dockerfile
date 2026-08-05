@@ -55,6 +55,8 @@ ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=256"
 ENV UV_THREADPOOL_SIZE=2
 ENV YT_DLP_PATH=/usr/local/bin/yt-dlp
+ENV HOME=/tmp
+ENV XDG_CACHE_HOME=/tmp/.cache
 
 RUN apt-get update \
     && apt-get install --no-install-recommends --yes ca-certificates dumb-init ffmpeg \
