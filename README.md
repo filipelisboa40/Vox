@@ -61,10 +61,6 @@ docker run -d --pull always \
   --memory-reservation 256m \
   --cpus 2 \
   --pids-limit 64 \
-  --read-only \
-  --tmpfs /tmp:size=64m,mode=1777 \
-  --cap-drop ALL \
-  --security-opt no-new-privileges:true \
   --log-opt max-size=5m \
   --log-opt max-file=2 \
   ghcr.io/filipelisboa40/vox:latest
