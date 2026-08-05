@@ -43,7 +43,6 @@ function createResourceFixture(results: readonly boolean[] = [true]): ResourceFi
     } as unknown as AudioResourceManager;
     Object.defineProperty(resources, 'currentTrack', { get: () => currentTrack });
     Object.defineProperty(resources, 'playbackPositionMs', { get: () => 42_000 });
-    Object.defineProperty(resources, 'volume', { get: () => 1 });
 
     return {
         resources,

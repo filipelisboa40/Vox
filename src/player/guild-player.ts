@@ -19,7 +19,6 @@ export interface GuildPlayerOptions {
     readonly logger: Logger;
     readonly onDestroyed: () => void;
     readonly playback?: PlaybackController;
-    readonly defaultVolume?: number;
     readonly idleDisconnectMs?: number;
 }
 
@@ -37,7 +36,6 @@ export class GuildPlayer {
     public readonly audioPlayer: AudioPlayer;
     readonly #logger: Logger;
     public readonly playback: PlaybackController | undefined;
-    #volume: number;
     #destroyed = false;
     #idleTimer: ReturnType<typeof setTimeout> | undefined;
     readonly #idleDisconnectMs: number;
@@ -49,7 +47,6 @@ export class GuildPlayer {
         this.audioPlayer = options.audioPlayer;
         this.#logger = options.logger;
         this.playback = options.playback;
-        this.#volume = validateGuildVolume(options.defaultVolume ?? 0.5);
         this.#idleDisconnectMs = options.idleDisconnectMs ?? 300_000;
 
         this.connection.subscribe(this.audioPlayer);
@@ -72,16 +69,6 @@ export class GuildPlayer {
         if (this.connection.state.status !== VoiceConnectionStatus.Destroyed) {
             this.connection.destroy();
         }
-    }
-
-    public get volume(): number {
-        return this.#volume;
-    }
-
-    public setVolume(volume: number): void {
-        const normalized = validateGuildVolume(volume);
-        this.playback?.setVolume(normalized);
-        this.#volume = normalized;
     }
 
     public async waitUntilReady(timeoutMs = 15_000): Promise<void> {
@@ -187,12 +174,4 @@ export class GuildPlayer {
             entersState(this.connection, VoiceConnectionStatus.Connecting, reconnectTimeoutMs),
         ]);
     }
-}
-
-function validateGuildVolume(volume: number): number {
-    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
-        throw new RangeError('Guild volume must be between 0 and 1');
-    }
-
-    return volume;
 }

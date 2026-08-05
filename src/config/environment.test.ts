@@ -12,7 +12,6 @@ describe('parseEnvironment', () => {
         expect(parseEnvironment(validInput)).toEqual({
             discordToken: validInput.DISCORD_TOKEN,
             discordClientId: validInput.DISCORD_CLIENT_ID,
-            defaultVolume: 10,
             idleDisconnectMs: 300_000,
         });
     });
@@ -25,17 +24,6 @@ describe('parseEnvironment', () => {
             parseEnvironment({ ...validInput, IDLE_DISCONNECT_SECONDS: '0' }).idleDisconnectMs,
         ).toBe(0);
         expect(() => parseEnvironment({ ...validInput, IDLE_DISCONNECT_SECONDS: '-1' })).toThrow(
-            ConfigurationError,
-        );
-    });
-
-    it('validates and returns a configured default volume', () => {
-        expect(parseEnvironment({ ...validInput, DEFAULT_VOLUME: '0' }).defaultVolume).toBe(0);
-        expect(parseEnvironment({ ...validInput, DEFAULT_VOLUME: '100' }).defaultVolume).toBe(100);
-        expect(() => parseEnvironment({ ...validInput, DEFAULT_VOLUME: '101' })).toThrow(
-            ConfigurationError,
-        );
-        expect(() => parseEnvironment({ ...validInput, DEFAULT_VOLUME: '10.5' })).toThrow(
             ConfigurationError,
         );
     });

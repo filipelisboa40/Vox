@@ -33,14 +33,12 @@ function createDependencies(options: {
     currentTrack?: Track;
     tracks?: readonly Track[];
     positionMs?: number;
-    volume?: number;
 }) {
     const queue = new QueueManager();
     options.tracks?.forEach((track) => queue.add(track));
     const playback = {
         currentTrack: options.currentTrack,
         playbackPositionMs: options.positionMs ?? 0,
-        volume: options.volume ?? 1,
         loopMode: LoopMode.Off,
         queue,
     } as PlaybackController;
@@ -82,18 +80,17 @@ describe('queue information commands', () => {
         expect(queueFixture.reply).toHaveBeenCalledWith('The queue is empty');
     });
 
-    it('shows progress, requester, volume, and loop mode for the current track', async () => {
+    it('shows progress, requester, and loop mode for the current track', async () => {
         const fixture = createInteraction();
         const track = createTrack('current');
 
         await createNowPlayingCommand(
-            createDependencies({ currentTrack: track, positionMs: 90_000, volume: 0.75 }),
+            createDependencies({ currentTrack: track, positionMs: 90_000 }),
         ).execute(fixture.interaction);
 
         const embed = getEmbed(fixture.reply);
         expect(embed.description).toContain(track.title);
         expect(embed.fields?.map((field) => field.value).join(' ')).toContain('1:30 / 3:00');
-        expect(embed.fields?.map((field) => field.value)).toContain('75%');
         expect(embed.fields?.map((field) => field.value)).toContain(
             `<@${track.requestedBy.userId}>`,
         );

@@ -131,7 +131,7 @@ export class YouTubeProvider implements AudioProvider {
 
         return {
             stream,
-            format: AudioSourceFormat.Unknown,
+            format: AudioSourceFormat.WebmOpus,
             dispose: () => {
                 stream.destroy();
                 process.kill('SIGKILL');
@@ -227,8 +227,9 @@ export class ProcessYtDlpRunner implements YtDlpRunner {
         const arguments_ = [
             '--no-playlist',
             '--no-warnings',
+            '--no-cache-dir',
             '--format',
-            'bestaudio/best',
+            'bestaudio[acodec=opus][ext=webm]',
             '--output',
             '-',
         ];

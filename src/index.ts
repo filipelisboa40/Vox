@@ -17,12 +17,7 @@ async function start(): Promise<void> {
     const providerManager = createProviderManager(environment);
     const playerManager = new PlayerManager(
         logger,
-        createManagedGuildPlayerFactory(
-            logger,
-            providerManager,
-            environment.defaultVolume / 100,
-            environment.idleDisconnectMs,
-        ),
+        createManagedGuildPlayerFactory(logger, providerManager, environment.idleDisconnectMs),
     );
     const commandRegistry = createCommandRegistry({
         players: playerManager,

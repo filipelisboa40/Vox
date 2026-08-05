@@ -50,6 +50,8 @@ RUN --mount=type=cache,id=pnpm-prod,target=/pnpm/store \
 FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=256"
+ENV UV_THREADPOOL_SIZE=2
 ENV YT_DLP_PATH=/usr/local/bin/yt-dlp
 
 RUN apt-get update \

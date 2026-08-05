@@ -5,10 +5,6 @@ const snowflakeSchema = z.string().regex(/^\d{17,20}$/, 'must be a valid Discord
 const environmentSchema = z.object({
     DISCORD_TOKEN: z.string().trim().min(1, 'is required'),
     DISCORD_CLIENT_ID: snowflakeSchema,
-    DEFAULT_VOLUME: z.preprocess(
-        (value) => (value === undefined || value === '' ? 10 : Number(value)),
-        z.number().int().min(0).max(100),
-    ),
     IDLE_DISCONNECT_SECONDS: z.preprocess(
         (value) => (value === undefined || value === '' ? 300 : Number(value)),
         z.number().int().min(0),
@@ -26,7 +22,6 @@ const environmentSchema = z.object({
 export interface Environment {
     discordToken: string;
     discordClientId: string;
-    defaultVolume: number;
     idleDisconnectMs: number;
     discordGuildId?: string;
     ytDlpPath?: string;
@@ -50,7 +45,6 @@ export function parseEnvironment(input: NodeJS.ProcessEnv): Environment {
     return {
         discordToken: result.data.DISCORD_TOKEN,
         discordClientId: result.data.DISCORD_CLIENT_ID,
-        defaultVolume: result.data.DEFAULT_VOLUME,
         idleDisconnectMs: result.data.IDLE_DISCONNECT_SECONDS * 1_000,
         ...(result.data.DISCORD_GUILD_ID === undefined
             ? {}

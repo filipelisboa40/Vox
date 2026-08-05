@@ -136,7 +136,6 @@ function createDefaultGuildPlayer(logger: Logger): GuildPlayerFactory {
 export function createManagedGuildPlayerFactory(
     logger: Logger,
     providerManager: ProviderManager,
-    defaultVolume = 0.5,
     idleDisconnectMs = 300_000,
 ): GuildPlayerFactory {
     return (options, onDestroyed) => {
@@ -156,7 +155,6 @@ export function createManagedGuildPlayerFactory(
             logger,
             onTrackFinished: (track) => playbackReference.current?.handleTrackFinished(track),
             onTrackFailed: () => playbackReference.current?.handleTrackFailed(),
-            defaultVolume,
         });
         const playback = new PlaybackController(audioResources, logger);
         playbackReference.current = playback;
@@ -166,7 +164,6 @@ export function createManagedGuildPlayerFactory(
             connection,
             audioPlayer,
             playback,
-            defaultVolume,
             idleDisconnectMs,
             logger,
             onDestroyed,

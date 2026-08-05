@@ -61,11 +61,6 @@ export function createNowPlayingCommand(dependencies: QueueInformationDependenci
                         value: `${formatProgress(positionMs, track.durationMs)}\n${formatDuration(positionMs)} / ${formatDuration(track.durationMs)}`,
                     },
                     { name: 'Requested by', value: `<@${track.requestedBy.userId}>`, inline: true },
-                    {
-                        name: 'Volume',
-                        value: `${Math.round(playback.volume * 100)}%`,
-                        inline: true,
-                    },
                     { name: 'Loop', value: formatLoopMode(playback.loopMode), inline: true },
                 );
 

@@ -54,10 +54,6 @@ export class PlaybackController {
         return this.#audioResources.playbackPositionMs;
     }
 
-    public get volume(): number {
-        return this.#audioResources.volume;
-    }
-
     public setLoopMode(loopMode: LoopMode): void {
         this.#loopMode = loopMode;
     }
@@ -78,10 +74,6 @@ export class PlaybackController {
 
     public resume(): boolean {
         return this.#audioResources.resume();
-    }
-
-    public setVolume(volume: number): void {
-        this.#audioResources.setVolume(volume);
     }
 
     public replay(): Promise<SeekResult> {

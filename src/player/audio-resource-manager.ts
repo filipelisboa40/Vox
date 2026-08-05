@@ -27,7 +27,6 @@ export interface PlayableSourceProvider {
 
 export interface PlayOptions {
     readonly startPositionMs?: number;
-    readonly volume?: number;
 }
 
 export interface AudioResourceManagerOptions {
@@ -37,14 +36,13 @@ export interface AudioResourceManagerOptions {
     readonly resourceFactory?: AudioResourceFactory;
     readonly onTrackFinished?: (track: Track) => void | Promise<void>;
     readonly onTrackFailed?: (track: Track, error: unknown) => void | Promise<void>;
-    readonly defaultVolume?: number;
 }
 
 export type AudioResourceFactory = (
     stream: Readable,
     options: {
         readonly inputType: StreamType;
-        readonly inlineVolume: true;
+        readonly inlineVolume: false;
         readonly metadata: Track;
     },
 ) => AudioResource<Track>;
@@ -66,7 +64,6 @@ export class AudioResourceManager {
     readonly #onTrackFailed: ((track: Track, error: unknown) => void | Promise<void>) | undefined;
     #current: ManagedResource | undefined;
     #requestGeneration = 0;
-    #volume: number;
     #pauseWhenPlaying = false;
 
     public constructor(options: AudioResourceManagerOptions) {
@@ -76,7 +73,6 @@ export class AudioResourceManager {
         this.#resourceFactory = options.resourceFactory ?? createAudioResource;
         this.#onTrackFinished = options.onTrackFinished;
         this.#onTrackFailed = options.onTrackFailed;
-        this.#volume = validateVolume(options.defaultVolume ?? 0.5);
         this.#registerPlayerHandlers();
     }
 
@@ -88,10 +84,6 @@ export class AudioResourceManager {
         return this.#current === undefined
             ? 0
             : this.#current.startPositionMs + this.#current.resource.playbackDuration;
-    }
-
-    public get volume(): number {
-        return this.#volume;
     }
 
     public pause(): boolean {
@@ -114,11 +106,6 @@ export class AudioResourceManager {
         }
 
         return this.#audioPlayer.unpause();
-    }
-
-    public setVolume(volume: number): void {
-        this.#volume = validateVolume(volume);
-        this.#current?.resource.volume?.setVolume(this.#volume);
     }
 
     public supportsSeeking(track: Track): boolean {
@@ -167,16 +154,9 @@ export class AudioResourceManager {
         try {
             const resource = this.#resourceFactory(source.stream, {
                 inputType: toDiscordStreamType(source.format),
-                inlineVolume: true,
+                inlineVolume: false,
                 metadata: track,
             });
-
-            if (resource.volume === undefined) {
-                throw new Error('Inline volume was not created for the audio resource');
-            }
-
-            this.#volume = validateVolume(options.volume ?? this.#volume);
-            resource.volume.setVolume(this.#volume);
             managedResource = {
                 track,
                 source,
@@ -316,14 +296,6 @@ function toProviderTrack(track: Track): ProviderTrack {
         durationMs: track.durationMs,
         ...(track.thumbnailUrl === undefined ? {} : { thumbnailUrl: track.thumbnailUrl }),
     };
-}
-
-function validateVolume(volume: number): number {
-    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
-        throw new RangeError('Audio resource volume must be between 0 and 1');
-    }
-
-    return volume;
 }
 
 async function disposeSource(source: PlayableSource): Promise<void> {

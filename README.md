@@ -71,7 +71,6 @@ On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if needed. Neve
 | `DISCORD_TOKEN`           | Yes      | Secret bot token from the Discord Developer Portal              |
 | `DISCORD_CLIENT_ID`       | Yes      | Discord application ID                                          |
 | `YT_DLP_PATH`             | No       | Full yt-dlp path; defaults to resolving `yt-dlp` from `PATH`    |
-| `DEFAULT_VOLUME`          | No       | Initial server volume from `0` to `100`; defaults to `10`       |
 | `IDLE_DISCONNECT_SECONDS` | No       | Idle time before disconnecting; defaults to `300`; `0` disables |
 | `DISCORD_GUILD_ID`        | No       | Development server ID for fast guild command deployment         |
 | `LOG_LEVEL`               | No       | Pino level such as `debug`, `info`, `warn`, or `error`          |
@@ -118,8 +117,7 @@ share Vox's current channel.
 | `/replay`      | None                                                  | Restarts the current track                                          |
 | `/seek`        | `position` (required seconds, `MM:SS`, or `HH:MM:SS`) | Moves to an absolute track position                                 |
 | `/fseek`       | `amount` (required signed seconds)                    | Moves forward or backward relative to the current position          |
-| `/now-playing` | None                                                  | Shows track, progress, requester, volume, and loop state            |
-| `/volume`      | `level` (required integer `0`–`100`)                  | Changes this server's player volume                                 |
+| `/now-playing` | None                                                  | Shows track, progress, requester, and loop state                    |
 | `/queue`       | `page` (optional, starts at `1`)                      | Shows a paginated waiting queue                                     |
 | `/clear`       | None                                                  | Removes waiting tracks without interrupting the current track       |
 | `/remove`      | `position` (required one-based queue position)        | Removes one waiting track                                           |
@@ -154,7 +152,7 @@ only tracks manual skips and cannot always restore a source that has become unav
 - Run `yt-dlp --version` and `ffmpeg -version` in the same environment that starts Vox.
 - Update `yt-dlp`; YouTube changes frequently and old versions can stop working.
 - Check that the video is public, available in your region, and authorized for your use.
-- Run `yt-dlp -f bestaudio/best -o - VIDEO_URL` manually to inspect extractor errors.
+- Run `yt-dlp -f "bestaudio[acodec=opus][ext=webm]" -o - VIDEO_URL` manually to inspect extractor errors.
 - If seeking fails, confirm FFmpeg is on `PATH`; `yt-dlp --download-sections` requires FFmpeg.
 
 ## Development checks

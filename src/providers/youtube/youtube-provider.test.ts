@@ -157,7 +157,7 @@ describe('YouTubeProvider with yt-dlp', () => {
         for await (const chunk of source.stream) audio += String(chunk);
 
         expect(audio).toBe('audio');
-        expect(source.format).toBe('unknown');
+        expect(source.format).toBe('webm-opus');
         expect(fixture.startAudio).toHaveBeenCalledWith(track.url, 30_000);
         await source.dispose?.();
         expect(fixture.mediaProcess.kill).toHaveBeenCalledWith('SIGKILL');

@@ -41,7 +41,6 @@ function createFixture(idleDisconnectMs = 1_000): GuildPlayerFixture {
         currentTrack: undefined,
         queue: { isEmpty: true },
         dispose,
-        setVolume: vi.fn(),
     } as unknown as PlaybackController;
     const onDestroyed = vi.fn();
     const logger = {

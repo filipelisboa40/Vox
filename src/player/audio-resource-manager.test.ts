@@ -86,26 +86,26 @@ function createSource(format: AudioSourceFormat = AudioSourceFormat.Unknown): So
 interface ResourceFixture {
     readonly factory: AudioResourceFactory;
     readonly resources: AudioResource<Track>[];
-    readonly setVolume: ReturnType<typeof vi.fn>;
     readonly receivedInputTypes: StreamType[];
+    readonly receivedInlineVolume: boolean[];
 }
 
 function createResourceFixture(): ResourceFixture {
     const resources: AudioResource<Track>[] = [];
-    const setVolume = vi.fn();
     const receivedInputTypes: StreamType[] = [];
+    const receivedInlineVolume: boolean[] = [];
     const factory: AudioResourceFactory = (_stream, options) => {
         receivedInputTypes.push(options.inputType);
+        receivedInlineVolume.push(options.inlineVolume);
         const resource = {
             metadata: options.metadata,
             playbackDuration: 0,
-            volume: { setVolume },
         } as unknown as AudioResource<Track>;
         resources.push(resource);
         return resource;
     };
 
-    return { factory, resources, setVolume, receivedInputTypes };
+    return { factory, resources, receivedInputTypes, receivedInlineVolume };
 }
 
 function createProvider(sources: readonly PlayableSource[]): {
@@ -200,7 +200,7 @@ describe('AudioResourceManager', () => {
         expect(manager.playbackPositionMs).toBe(60_000);
     });
 
-    it('creates and plays an inline-volume resource with a requested offset', async () => {
+    it('creates and plays a direct Opus resource with a requested offset', async () => {
         const player = createAudioPlayerFixture();
         const source = createSource(AudioSourceFormat.WebmOpus);
         const provider = createProvider([source.source]);
@@ -212,59 +212,14 @@ describe('AudioResourceManager', () => {
             resourceFactory: resources.factory,
         });
 
-        await expect(
-            manager.play(createTrack('song'), { startPositionMs: 15_000, volume: 0.5 }),
-        ).resolves.toBe(true);
+        await expect(manager.play(createTrack('song'), { startPositionMs: 15_000 })).resolves.toBe(
+            true,
+        );
 
         expect(provider.requestedPositions).toEqual([15_000]);
         expect(resources.receivedInputTypes).toEqual([StreamType.WebmOpus]);
-        expect(resources.setVolume).toHaveBeenCalledWith(0.5);
+        expect(resources.receivedInlineVolume).toEqual([false]);
         expect(player.play).toHaveBeenCalledWith(resources.resources[0]);
-    });
-
-    it('applies volume immediately and preserves it across replacement resources', async () => {
-        const player = createAudioPlayerFixture();
-        const resources = createResourceFixture();
-        const manager = new AudioResourceManager({
-            audioPlayer: player.audioPlayer,
-            provider: createProvider([createSource().source, createSource().source]).provider,
-            logger: createLogger(),
-            resourceFactory: resources.factory,
-            defaultVolume: 0.5,
-        });
-        await manager.play(createTrack('first'));
-
-        manager.setVolume(0);
-        await manager.play(createTrack('second'));
-
-        expect(resources.setVolume).toHaveBeenNthCalledWith(1, 0.5);
-        expect(resources.setVolume).toHaveBeenNthCalledWith(2, 0);
-        expect(resources.setVolume).toHaveBeenNthCalledWith(3, 0);
-        expect(manager.volume).toBe(0);
-        expect(player.pause).not.toHaveBeenCalled();
-    });
-
-    it('validates volume boundaries and keeps guild resource managers isolated', () => {
-        const first = new AudioResourceManager({
-            audioPlayer: createAudioPlayerFixture().audioPlayer,
-            provider: createProvider([]).provider,
-            logger: createLogger(),
-            defaultVolume: 0,
-        });
-        const second = new AudioResourceManager({
-            audioPlayer: createAudioPlayerFixture().audioPlayer,
-            provider: createProvider([]).provider,
-            logger: createLogger(),
-            defaultVolume: 1,
-        });
-
-        expect(first.volume).toBe(0);
-        expect(second.volume).toBe(1);
-        first.setVolume(0.25);
-        expect(first.volume).toBe(0.25);
-        expect(second.volume).toBe(1);
-        expect(() => first.setVolume(-0.01)).toThrow(RangeError);
-        expect(() => first.setVolume(1.01)).toThrow(RangeError);
     });
 
     it('disposes the previous source after replacement', async () => {
@@ -455,23 +410,6 @@ describe('AudioResourceManager', () => {
 
         expect(onTrackFinished).not.toHaveBeenCalled();
         expect(source.dispose).toHaveBeenCalledOnce();
-    });
-
-    it('rejects invalid volume and disposes the new source', async () => {
-        const player = createAudioPlayerFixture();
-        const source = createSource();
-        const onTrackFailed = vi.fn().mockResolvedValue(undefined);
-        const manager = new AudioResourceManager({
-            audioPlayer: player.audioPlayer,
-            provider: createProvider([source.source]).provider,
-            logger: createLogger(),
-            resourceFactory: createResourceFixture().factory,
-            onTrackFailed,
-        });
-
-        await expect(manager.play(createTrack('track'), { volume: 2 })).resolves.toBe(false);
-        expect(source.stream.destroyed).toBe(true);
-        expect(onTrackFailed).toHaveBeenCalledOnce();
     });
 });
 

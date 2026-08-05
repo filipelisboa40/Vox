@@ -32,7 +32,6 @@ import {
     loopCommandData,
     loopQueueCommandData,
 } from './playback/loop-commands.js';
-import { createVolumeCommand, volumeCommandData } from './playback/volume-command.js';
 import {
     createAbsoluteSeekCommand,
     createForwardSeekCommand,
@@ -64,7 +63,6 @@ export const commandDefinitions = [
     replayCommandData,
     seekCommandData,
     forwardSeekCommandData,
-    volumeCommandData,
     clearCommandData,
     removeCommandData,
     moveCommandData,
@@ -91,7 +89,6 @@ export function createCommandRegistry(dependencies: {
         createReplayCommand({ players: dependencies.players }),
         createAbsoluteSeekCommand({ players: dependencies.players }),
         createForwardSeekCommand({ players: dependencies.players }),
-        createVolumeCommand({ players: dependencies.players }),
         createClearCommand({ players: dependencies.players }),
         createRemoveCommand({ players: dependencies.players }),
         createMoveCommand({ players: dependencies.players }),
